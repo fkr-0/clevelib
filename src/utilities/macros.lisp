@@ -6,9 +6,8 @@
 ;; registering event listeners, triggering events, and managing live updates.
 
 (defpackage :clevelib.macros
-  (:use :cl :bt :clevelib.core )
+  (:use :cl :bt :clevelib.core :clevelib.async)
   (:export :deflistener
-    :with-event-loop
     :trigger
     :on
     :defevent
@@ -34,7 +33,9 @@
    EVENT is a keyword symbol specifying event type
    and TARGET is a symbol. Body is the body of a callback function
    that got the triggered event bound to parameter event passed."
-  `(add-event-listener ,event ,target (lambda (event) ,@body)))  ;Use lambda instead of defun
+  `(add-event-listener ,event ,target (lambda (event)
+                                        (declare (ignorable event))
+                                        ,@body)))  ;Use lambda instead of defun
 
 ;; Macro: trigger
 (defmacro trigger (event target &rest args)
@@ -93,28 +94,38 @@ and TARGET is a symbol."
 
 ;; Macro: with-event-loop
 ;; Purpose: Run the body of code within a specific event loop.
-(defmacro with-event-loop (event-loop &body body)
-  (let ((event-loop-sym (gensym "EVENT-LOOP-")))
-    `(let ((,event-loop-sym ,event-loop))
-       (set-event-loop ,event-loop-sym)
-       ,@body)))
+;; (defmacro with-event-loop (event-loop &body body)
+;;   "Run the body of code within a specific event loop. The event loop
+;;    is specified by the event-loop parameter, which can be either a
+;;    symbol or a function. If the parameter is a symbol, the symbol is
+;;    resolved to a function using the function get-event-loop. If the
+;;    parameter is a function, the function is used as the event loop."
+;;   (let ((event-loop-sym (gensym "EVENT-LOOP-")))
+;;     `(let ((,event-loop-sym (if (functionp ,event-loop)
+;;                                ,event-loop
+;;                                (get-event-loop ,event-loop))))
+;;        (bt:with-event-loop (:event-loop ,event-loop-sym)
+;;          ,@body))))
 
 ;; Macro: live-update
 ;; Purpose: Define a live update function with optional interval.
-(defmacro live-update (update-function &key interval)
-  "Defines a live update function with optional interval."
-  (let ((update-function-sym (gensym "UPDATE-FUNCTION-")))
-    `(defconstant ,update-function-sym ',update-function)
-    `(setf (gethash ,update-function-sym +live-updates+) ,interval)))
+;; (defmacro live-update (update-function &key interval)
+;;   "Defines a live update function with optional interval."
+;;   (let ((update-function-sym (gensym "UPDATE-FUNCTION-")))
+;;     `(defconstant ,update-function-sym ',update-function)
+;;     `(setf (gethash ,update-function-sym +live-updates+) ,interval)))
 
 ;; Macro: defasync
 ;; Purpose: Define an asynchronous function.
 (defmacro defasync (name &body body)
-  "Defines an asynchronous function."
+  "Defines an asynchronous function.
+The function is run in a separate thread. The function is called with
+the same arguments as the asynchronous function."
   (let ((func (gensym "FUNC-")))
     `(defun ,name (&rest args)
-       (let ((,func (function (lambda () ,@body))))
-         (apply #'async-exec ,func args)))))
+       (let ((,func (function (lambda () ,@body)))
+              )
+         (apply #'clevelib.async:async-run ,func args)))))
 
 ;; Macro: with-mutex
 ;; Purpose: Run the body of code while holding the given mutex.

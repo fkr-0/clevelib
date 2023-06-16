@@ -14,17 +14,41 @@
 ;;           clevelib:condition-variable-signal))
 (ql:quickload :bordeaux-threads)
 ;; Define a struct to represent an async task
+(defpackage :clevelib.async
+  (:use :cl :bt )
+  (:export :make-async-task
+    :async-exec
+    :cancel-async-task
+    :async-run
+    :async-task-finished-p
+    :async-task-result
+    :async-task-status
+    :async-task-error))
+
+(in-package :clevelib.async)
+
 (defstruct (async-task (:conc-name async-task-))
   function
   args
   thread
+  status
+  condition-variable
   lock
   result
   error
   finished)
 
+(defun async-run (function &rest args)
+  "Run the given function asynchronously, with the given arguments.
+   Returns the async task."
+  (let ((task (make-async-task :function function
+                :args args
+                :lock (bt:make-recursive-lock)
+                :finished nil)))
+    (async-exec task)
+    task))
 
-(defun make-async-task (function &rest args)
+(defun spawn-async-task (function &rest args)
   "Create an async task. On execution a thread is created
     and the function is executed in that thread. The result of the function is
     stored in the task.
@@ -43,6 +67,7 @@
     (setf (async-task-thread task)
       (bt:make-thread
         (lambda ()
+          ;; (format t "Executing task ~a~%" task)
           (handler-case
             (progn
               (loop while (bt:with-lock-held ((async-task-lock task))
@@ -51,11 +76,15 @@
                      (setf (async-task-result task)
                        (apply (async-task-function task)
                          (async-task-args task)))
-                     (setf (async-task-finished task) t)))
-              (error (err)
-                (bt:with-lock-held ((async-task-lock task))
-                  (setf (async-task-error task) err)
-                  (setf (async-task-finished task) t))))))))))
+                     (setf (async-task-finished task) t))))
+            (error (err)
+
+              (bt:with-lock-held ((async-task-lock task))
+                (setf (async-task-status task) :error)
+                (setf (async-task-error task) err)
+                (setf (async-task-finished task) t)))))))))
+
+
 
 
 
@@ -63,14 +92,14 @@
   "Cancel the given async task, if possible."
   (unless (async-task-finished task)
     (when (bt:thread-alive-p (async-task-thread task))
-      (bt:terminate-thread (async-task-thread task)))
+      (bt:destroy-thread (async-task-thread task)))
     (bt:with-lock-held ((async-task-lock task))
       (setf (async-task-finished task) t))))
 
 
-(defun async-task-finished-p (task)
+(defun async-task-finished-p ( task)
   "Return true if the given async task has finished."
-  (with-mutex ((async-task-mutex task))
+  (bt:with-lock-held ((async-task-lock task))
     (async-task-finished task)))
 
 ;; Usage example
@@ -79,13 +108,13 @@
 ;;  (format t "Task finished: ~a~%" (async-task-result task :timeout 10)))
 ;;
 ;;
-(defun async-task-result (task &key (timeout 0))
+(defun poll-result (task &key (timeout 0))
   "Get the result of the given async task, waiting for up to `timeout` seconds.
    Returns multiple values: the result, error (if any), and a boolean indicating if the task is finished."
-  (bt:with-lock-held ((async-task-mutex task))
+  (bt:with-lock-held ((async-task-lock task))
     (when (not (async-task-finished task))
       (bt:condition-wait (async-task-condition-variable task)
-        (async-task-mutex task)
+        (async-task-lock task)
         :timeout timeout))
     (cond ((eq (async-task-status task) :error)
             (error (format nil "Task finished with error: ~A" (async-task-error task))))

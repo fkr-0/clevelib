@@ -8,13 +8,19 @@
   (:use :common-lisp  :clevelib.synchronization)
   (:export :enqueue
     :dequeue
+    :dequeue-prio
     :change-event-priority
     :event-queue-empty-p
     :event-queue-length
     :event-queue
     :make-event-queue
+    :make-priority-queue
+    :priority
     :priority-queue
+    :event-queue-mutex
+    :priority-queue-mutex
     :enqueue
+    :enqueue-prio
     :queue
     :size))
 (in-package :clevelib.queues)
@@ -30,12 +36,12 @@
 ;;     ;; ... dequeue the next event from the appropriate queue ...
 ;;     ))
 
-(defparameter *event-queue-mutex* (bt:make-lock "event-queue-mutex"))
+;; (defparameter *event-queue-mutex* (bt:make-lock "event-queue-mutex"))
 (defclass priority-queue ()
   ((queue :initform (make-hash-table)
      :accessor queue)
-    (mutex :initform *event-queue-mutex*
-      :accessor mutex)
+    (mutex :initform (bt:make-lock "event-queue-mutex")
+      :accessor priority-queue-mutex)
     (priority :initform :normal
       :accessor priority :documentation "The priority of the queue,
 either :high or :normal"))
@@ -43,16 +49,23 @@ either :high or :normal"))
  high and normal. Events enqueued with the high priority are dequeued before
 events enqueued with the normal priority."))
 
-(defmethod enqueue ((queue priority-queue) event)
+(defun make-priority-queue ()
+  "Create a new priority queue
+    PRIORITY - the priority of the queue, either :high or :normal
+defaults to :normal"
+  (make-instance 'priority-queue ))
+
+(defmethod enqueue-prio ((queue priority-queue) event)
   "Enqueue an event to the priority-queue
     QUEUE - the priority queue to enqueue the event to
     EVENT - the event to enqueue"
-  (with-lock-held (mutex queue)
+  (bt:with-lock-held ((priority-queue-mutex queue))
     (push event (gethash (priority queue) (queue queue)))))
-(defmethod dequeue ((queue priority-queue))
+
+(defmethod dequeue-prio ((queue priority-queue))
   "Dequeue the next event from the priority-queue
     QUEUE - the priority queue to dequeue the event from"
-  (with-lock-held (mutex queue)
+  (bt:with-lock-held ((priority-queue-mutex queue))
     (pop (gethash (priority queue) (queue queue)))))
 
 
@@ -76,11 +89,11 @@ events enqueued with the normal priority."))
   (with-event-mutex (event-queue-mutex event-queue)
     (pop (event-queue-events event-queue))))
 
-(defun change-event-priority (event-queue priority)
+(defmethod change-event-priority (( queue priority-queue) prio)
   "Change the priority of an event in the event-queue
-    EVENT-QUEUE - the event queue containing the event
+    QUEUE - the event queue containing the event
     PRIORITY - the new priority of the event"
-  (setf (event-queue-priority event-queue) priority))
+  (setf (priority queue) prio))
 
 
 ;; Additional utility functions for event queue management

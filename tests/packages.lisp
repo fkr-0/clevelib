@@ -7,7 +7,9 @@
     :clevelib.queues
     :clevelib.event-loops
     :clevelib.synchronization
-    :clevelib.macros))
+    :clevelib.async
+    :clevelib.macros
+    ))
 
 
 (in-package :clevelib-tests)

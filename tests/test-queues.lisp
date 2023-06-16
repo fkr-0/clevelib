@@ -14,10 +14,10 @@
 
 ;; Test that the priority of an event can be changed
 (test test-change-event-priority
-  (let ((event-queue (make-event-queue)))
-    (enqueue event-queue "test-event")
-    (change-event-priority event-queue :high)
-    (is (equal (event-queue-priority event-queue) :high))))
+  (let ((equeue (make-priority-queue)))
+    (enqueue-prio equeue "test-event")
+    (change-event-priority equeue :high)
+    (is (equal (priority equeue) :high))))
 
 ;; Test that an event queue can be checked for emptiness
 (test test-event-queue-empty-p

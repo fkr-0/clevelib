@@ -1,10 +1,17 @@
+
 (defpackage :clevelib.event-loops
   (:use #:cl #:bt #:clevelib.queues :clevelib.core
     )
   (:export #:enqueue-event
     #:make-event-loop
+    #:async
+    #:until
+    #:with-event-loop
+    #:fps
     #:get-event-loop
     #:event-loop-active-p
+    #:notify-event
+    #:event-loop
     #:enqueue-event
     #:process-single-event
     #:trigger-error-event
@@ -19,10 +26,10 @@
 ;; event.lisp
 
 (defvar *error-event-priority* 10)
-(defvar *event-queue* (clevelib.queues:make-event-queue ))
-(defvar *event-loops-active* (make-hash-table :test 'equal))
-(defvar *event-lock* (bt:make-lock "event lock"))
-(defvar *event-loops* (make-hash-table :test 'equal))
+;; (defvar *event-queue* (clevelib.queues:make-event-queue ))
+;; (defvar *event-loops-active* (make-hash-table :test 'equal))
+;; (defvar *event-lock* (bt:make-lock "event lock"))
+;; (defvar *event-loops* (make-hash-table :test 'equal))
 
 
 ;; (defmethod trigger-event ((event event) (target t) (data t))
@@ -42,8 +49,8 @@
 
 (defun process-single-event (event-priority-queue)
   "Process a single event in the given event-priority-queue."
-  (bt:with-lock-held (*event-lock*)
-    (let ((event (dequeue-event event-priority-queue)))
+  (bt:with-lock-held ((clevelib.queues:priority-queue-mutex event-priority-queue))
+    (let ((event (dequeue event-priority-queue)))
       (when event
         (handler-case
           (clevelib.core:dispatch-event event)
@@ -53,7 +60,7 @@
 (defclass event-loop ()
   ((id :initarg :id :initform nil :accessor id)
     (queue :initarg :queue
-      :initform (make-instance 'priority-event-queue)
+      :initform (make-instance 'priority-queue)
       :accessor queue)
     (thread :initarg :thread
       :initform nil
@@ -66,7 +73,38 @@
       :accessor condition-var)
     (active :initarg :active
       :initform nil
-      :accessor active)))
+      :accessor active)
+    (fps :initform nil
+      :accessor fps)
+    (until :initarg :until
+      :initform t
+      :accessor until )
+    (async :initarg :async :initform t :accessor async)
+    (loop-fun :initarg :loop-fun
+      :initform (lambda () (format t "No loop function defined."))
+      ;; (loop while t
+      ;;   do (process-loop-events ev-loop)))
+      :accessor loop-fun
+      :documentation "The function that is executed
+in the event loop thread.")
+    )(:documentation "An event loop."))
+
+(defmethod get-loop-fun ((ev-loop event-loop))
+  (lambda ()
+    (setf (active ev-loop) t)
+    (let ((until (if (functionp (until ev-loop)) (until ev-loop)
+                   (lambda () (until ev-loop))))
+           (first-time-p t))
+      (loop while (or first-time-p
+                    (and (active ev-loop) (funcall until)))
+        do (progn
+             (when first-time-p
+               (setf first-time-p nil))
+             (with-fps (fps ev-loop)
+               (funcall (loop-fun ev-loop))))
+        ))
+    (setf (active ev-loop) nil) #'(lambda () nil)
+    ))
 
 (defun make-event-loop ()
   "Make an event loop."
@@ -87,15 +125,43 @@
   "Start an event loop."
   (unless (active ev-loop)
     (setf (active ev-loop) t)
-    (setf (thread ev-loop) (bt:make-thread
-                             (lambda ()
-                               (loop while (active ev-loop)
-                                 do (process-loop-events ev-loop)))))))
+    (if (async ev-loop)
+      (setf (thread ev-loop) (bt:make-thread
+                               (get-loop-fun ev-loop)))
+      (funcall (get-loop-fun ev-loop))))
+  ev-loop)
+
+;; keywords: :id :async :until
+;; :id -> take loop given by id else create new
+;; :async -> start loop in new thread (default t)
+;; :until -> t -> loop forever
+;;           nil -> loop once
+;;           callable -> loop until callable returns nil
+(defmacro with-event-loop ((&key (id nil) (async t) (until t)) &body body)
+  "Execute the body in the event loop with the given id.
+If no id is given, a new event loop is created. If async is
+true, the event loop is started in a new thread. If until is
+true, the event loop is executed until the body returns. If until
+is a callable, the event loop is executed until the callable
+returns nil. The event loop is returned."
+  (let ((ev-loop (gensym)))
+    `(let ((,ev-loop (if ,id
+                       (get-event-loop ,id)
+                       (make-event-loop))))
+       (with-slots (loopfun async until) ,ev-loop
+         (setf loopfun (lambda () (progn ,@body)))
+         (setf async ,async)
+         (setf until ,until))
+       (start-event-loop ,ev-loop))
+    ev-loop))
 
 (defun stop-event-loop (ev-loop)
   "Stop the event loop."
-  (when (active ev-loop)
-    (setf (active ev-loop) nil)))
+  (bt:with-lock-held ((lock ev-loop) )
+    (setf (until ev-loop) nil)
+    (notify-event ev-loop)))
+;; (when (active ev-loop)
+;;   (setf (active ev-loop) nil)))
 
 (defun process-loop-events (ev-loop)
   "Process the events in the queue of the loop."
@@ -120,7 +186,20 @@
 
 
 
-
+(defmacro with-fps (fps &body body)
+  "Execute the body with the given fps."
+  `(format t "FPS: ~A~%" ,fps)
+  (if `(numberp ,fps)
+    `(let ((fpsreal (/ 1000000.0 ,fps))
+            (time (get-internal-real-time)))
+       (progn ,@body)
+       (let ((time-diff (- (get-internal-real-time) time)))
+         (if (< time-diff fpsreal)
+           ;; (progn
+           ;;   (format t "Sleep: ~A ~%" (- fpsreal time-diff))
+           (sleep (/ (- fpsreal time-diff) 1000000.0))
+           (warn "FPS too low! ~A" time-diff))))
+    `(progn ,@body)))
 
 
 

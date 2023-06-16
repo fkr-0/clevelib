@@ -3,7 +3,7 @@ LISP ?= sbcl
 all: test
 
 run:
-	ros run --load ~/.sbclrc --load "run.lisp"
+	ros run  --load "run.lisp" --load ~/.sbclrc
 
 build:
 	$(LISP)	--non-interactive \
