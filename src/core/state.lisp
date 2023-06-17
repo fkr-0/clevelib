@@ -1,7 +1,7 @@
 (defpackage :clevelib.state
   (:use :cl )
   (:nicknames :cl.state)
-  (:export :*state* :state)
+  (:export :*state* )
   )
 
 (in-package :clevelib.state)
@@ -28,6 +28,10 @@
 
 (make-instance 'state)
 
+(defun log-message (format-string &rest args)
+  "Log a message to the state machine."
+  (apply #'format t format-string args)
+  (terpri))
 
 (defun transition-state (new-state)
   "Transition the state machine to the new state."
@@ -55,11 +59,11 @@
                                         ; If there is no previous state, signal an error.
       (error "No previous state to revert to"))))
 
-(defun get-state-value ( key string )
+(defun get-state-value ( key  )
   "Get the value of the state variable with the given key."
   (gethash key *state*))
 
-(defun set-state-value (key string value)
+(defun set-state-value (key  value)
   "Set the value of the state variable with the given key."
   (setf (gethash key *state*) value))
 
@@ -68,16 +72,16 @@
 
 (defun add-target (target-name target)
   "Add a target to the state machine."
-  (setf (gethash target-name (state-targets state))
+  (setf (gethash target-name (state-targets *state*))
     target))
 (defun get-target (target-name)
   "Get a target from the state machine."
-  (gethash target-name (state-targets state)))
+  (gethash target-name (state-targets *state*)))
 (defun add-event-type (event-type construct)
   "Add an event type to the state machine. The construct function is called when the event is dispatched.
 The construct function should return an event object or a subclass, event-type
 should be a keyword."
-  (setf (gethash  event-type (state-event-classes state))
+  (setf (gethash  event-type (state-event-classes *state*))
     construct))
 
 (defun add-loop (loop-name loop)
@@ -89,10 +93,10 @@ should be a keyword."
   (gethash loop-name (state-event-loops *state*)))
 
 
-(defun dispatch-constructor (event-type &rest args)
-  (if (gethash event-type (state-event-classes *state*))
-    (apply (gethash event-type (state-event-classes *state*)) args)
-    (apply #'make-event  args)))
+;; (defun dispatch-constructor (event-type &rest args)
+;;   (if (gethash event-type (state-event-classes *state*))
+;;     (apply (gethash event-type (state-event-classes *state*)) args)
+;;     (apply #'make-event  args)))
 
 
 ;; (defun set-state (new-state)
@@ -113,23 +117,23 @@ should be a keyword."
 ;;   (dolist (callback (gethash state (state-listeners *state*)))
 ;;     (funcall callback)))
 
-(defun transition-state (new-state)
-  "Transition the state machine to the new state."
-  (call-state-listeners (state-current-state *state*))
-  (setf (state-previous-state *state*) (state-current-state *state*))
-  (push (cons (state-current-state *state*) (state-previous-state *state*))
-    (state-state-history *state*))
-  (setf (state-current-state *state*) new-state)
-  (call-state-listeners new-state))
+;; (defun transition-state (new-state)
+;;   "Transition the state machine to the new state."
+;;   (call-state-listeners (state-current-state *state*))
+;;   (setf (state-previous-state *state*) (state-current-state *state*))
+;;   (push (cons (state-current-state *state*) (state-previous-state *state*))
+;;     (state-state-history *state*))
+;;   (setf (state-current-state *state*) new-state)
+;;   (call-state-listeners new-state))
 
 
-(defun revert-state ()
-  (let ((previous-state (state-previous-state *state*)))
-    (if previous-state
-      (progn
-        (setf (state-current-state *state*) previous-state)
-        (setf (state-previous-state *state*) nil))
-      (error "No previous state to revert to"))))
+;; (defun revert-state ()
+;;   (let ((previous-state (state-previous-state *state*)))
+;;     (if previous-state
+;;       (progn
+;;         (setf (state-current-state *state*) previous-state)
+;;         (setf (state-previous-state *state*) nil))
+;;       (error "No previous state to revert to"))))
 
 ;; (defun get-state ()
 ;;   "Get the current state of the application."
@@ -153,11 +157,11 @@ should be a keyword."
 ;;   (dolist (callback (gethash state (state-listeners *state*)))
 ;;     (funcall callback)))
 
-(defun transition-state (new-state)
-  "Transition the state machine to the new state."
-  (call-state-listeners (state-current-state *state*))
-  (setf (state-previous-state *state*) (state-current-state *state*))
-  (push (cons (state-current-state *state*) (state-previous-state *state*))
-    (state-state-history *state*))
-  (setf (state-current-state *state*) new-state)
-  (call-state-listeners new-state))
+;; (defun transition-state (new-state)
+;;   "Transition the state machine to the new state."
+;;   (call-state-listeners (state-current-state *state*))
+;;   (setf (state-previous-state *state*) (state-current-state *state*))
+;;   (push (cons (state-current-state *state*) (state-previous-state *state*))
+;;     (state-state-history *state*))
+;;   (setf (state-current-state *state*) new-state)
+;;   (call-state-listeners new-state))

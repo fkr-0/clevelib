@@ -44,7 +44,7 @@
   (gethash id *event-loops*))
 
 (defun event-loop-active-p (id)
-  (member id *event-loops-active*))
+  (active (get-event-loop id)))
 
 
 (defun process-single-event (event-priority-queue)
