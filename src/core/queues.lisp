@@ -5,7 +5,7 @@
 ;;          dequeuing, and managing event priorities.
 ;;
 (defpackage :clevelib.queues
-  (:use :common-lisp  :clevelib.synchronization)
+  (:use :common-lisp  )
   (:export :enqueue
     :dequeue
     :dequeue-prio
@@ -24,7 +24,7 @@
     :queue
     :size))
 (in-package :clevelib.queues)
-(defvar *event-queues-mutex* (make-instance 'clevelib.synchronization:event-mutex))
+;; (defvar *event-queues-mutex* (make-instance 'clevelib.synchronization:event-mutex))
 
 ;; (defun enqueue-event (event)
 ;;   (clevelib:with-event-mutex *event-queues-mutex*
@@ -36,11 +36,10 @@
 ;;     ;; ... dequeue the next event from the appropriate queue ...
 ;;     ))
 
-;; (defparameter *event-queue-mutex* (bt:make-lock "event-queue-mutex"))
 (defclass priority-queue ()
   ((queue :initform (make-hash-table)
      :accessor queue)
-    (mutex :initform (bt:make-lock "event-queue-mutex")
+    (mutex :initform (clevelib.threads:make-mutex)
       :accessor priority-queue-mutex)
     (priority :initform :normal
       :accessor priority :documentation "The priority of the queue,
@@ -59,19 +58,19 @@ defaults to :normal"
   "Enqueue an event to the priority-queue
     QUEUE - the priority queue to enqueue the event to
     EVENT - the event to enqueue"
-  (bt:with-lock-held ((priority-queue-mutex queue))
+  (clevelib.threads:with-mutex (priority-queue-mutex queue)
     (push event (gethash (priority queue) (queue queue)))))
 
 (defmethod dequeue-prio ((queue priority-queue))
   "Dequeue the next event from the priority-queue
     QUEUE - the priority queue to dequeue the event from"
-  (bt:with-lock-held ((priority-queue-mutex queue))
+  (clevelib.threads:with-mutex (priority-queue-mutex queue)
     (pop (gethash (priority queue) (queue queue)))))
 
 
 (defstruct event-queue
   events
-  (mutex (make-instance 'clevelib.synchronization:event-mutex))
+  (mutex (clevelib.threads:make-mutex))
   (priority :normal))
 
 
@@ -79,14 +78,14 @@ defaults to :normal"
   "Enqueue an event to the event-queue
     EVENT-QUEUE - the event queue to enqueue the event to
     EVENT - the event to enqueue"
-  (with-event-mutex (event-queue-mutex event-queue)
+  (clevelib.threads:with-mutex (event-queue-mutex event-queue)
     (push event (event-queue-events event-queue))))
 
 
 (defun dequeue (event-queue)
   "Dequeue the next event from the event-queue
     EVENT-QUEUE - the event queue to dequeue the event from"
-  (with-event-mutex (event-queue-mutex event-queue)
+  (clevelib.threads:with-mutex (event-queue-mutex event-queue)
     (pop (event-queue-events event-queue))))
 
 (defmethod change-event-priority (( queue priority-queue) prio)

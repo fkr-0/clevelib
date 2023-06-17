@@ -16,10 +16,15 @@ Another solution to run the app is to build and run a binary (see README).
 (load "clevelib.asd")
 
 (ql:quickload "clevelib")
-
+(ql:quickload "cl-repl")
 (in-package :clevelib)
 (handler-case
-    (main)
+  (progn
+    (let ((x 10))
+      (clevelib.event-loops:with-event-loop (:fps 1 :until (lambda () (not (zerop x))) )
+        (format t "~A.~%" x)
+        (setf x (- x 1)))
+      (cl-repl:main)))
   (error (c)
     (format *error-output* "~&An error occured: ~a~&" c)
     (uiop:quit 1)))

@@ -12,6 +12,7 @@
                  :components ((:file "packages")
                                (:file "test-clevelib")
                                (:file "test-macros")
+                               (:file "test-threads")
                                (:file "test-queues")))))
 
 ;; The following would not return the right exit code on error, but still 0.

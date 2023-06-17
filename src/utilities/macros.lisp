@@ -16,7 +16,10 @@
     :defasync
     :with-mutex
     :bind
-    :with-condition-variable))
+    :with-condition-variable)
+  (:import-from :clevelib.core :add-event-listener :dispatch-event :make-event)
+  (:import-from :clevelib.async :async-run)
+  (:documentation "Utility macros for the event system."))
 
 
 (in-package :clevelib.macros)

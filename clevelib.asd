@@ -16,9 +16,9 @@
   :serial t
   :components ((:module "./src"
                  :serial t
-                 :components (
+                 :components ((:file "core/state")
                                (:file "async/threads")
-                               (:file "async/synchronization")
+                               ;; (:file "async/synchronization")
                                ;; (:file "listeners/handlers")
                                ;; (:file "core/dispatcher")
                                ;; (:file "listeners/listeners")
@@ -29,7 +29,8 @@
                                (:file "utilities/macros")
                                ;; (:file "queues")
                                ;; (:file "clevelib")
-                               (:file "./clevelib") )))
+                               (:file "./clevelib")
+                               )))
 
   ;; Build a binary:
   ;; don't change this line.

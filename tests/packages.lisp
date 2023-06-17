@@ -1,3 +1,4 @@
+;; (ql:quickload :fiveam)
 (in-package :asdf-user)
 (defpackage :clevelib-tests
   (:use :common-lisp
@@ -6,7 +7,6 @@
     :clevelib.core
     :clevelib.queues
     :clevelib.event-loops
-    :clevelib.synchronization
     :clevelib.async
     :clevelib.macros
     ))

@@ -8,46 +8,95 @@
 
 (defpackage :clevelib.threads
   (:use :cl :bordeaux-threads)
-  (:export :create-thread
-    :destroy-thread
+  (:export
+    :destroy
     :destroy-all-threads
+    :thread-alive-p
+    :create-thread
     :make-mutex
+    :thread-pool
+    :get-thread
     :with-mutex
     :make-condition-variable
     :wait-on-condition
     :signal-condition
     :broadcast-condition
-    :cleanup))
+    :cleanup)
+  (:import-from :cl.state :*state*) )
+
 (in-package :clevelib.threads)
-;; (ql:quickload :bordeaux-threads)
-;;;; Thread management
-
-(defparameter *threads* (make-hash-table)
-  "A hash table that stores active threads by their thread IDs.")
-
-(defun create-thread (function &rest args)
-  "Create and start a new thread, executing FUNCTION with ARGS."
-  (let ((thread (bt:make-thread (lambda () (apply function args)))))
-    (setf (gethash (bt:thread-name thread) *threads*) thread)
-    thread))
-
-(defun destroy-thread (thread)
-  "Destroy a thread and remove it from the active threads hash table."
-  (remhash (bt:thread-name thread) *threads*)
-  (bt:destroy-thread thread))
-
-(defun destroy-all-threads ()
-  "Destroy all active threads."
-  (maphash (lambda (id thread)
-             (declare (ignorable id))
-
-             (destroy-thread thread)) *threads*))
-
-;;;; Mutexes and condition variables
 
 (defun make-mutex (&optional name)
   "Create a new mutex with the optional NAME."
   (bt:make-lock name))
+
+(defun make-condition-variable ()
+  "Create a new condition variable."
+  (sb-thread:make-waitqueue))
+(defclass thread-pool ()
+  ((threads :initarg :threads
+     :accessor threads
+     :initform (make-hash-table))
+    (mutex :initarg :mutex
+      :accessor mutex
+      :initform (make-mutex))
+    (conditionv :initarg :condition
+      :accessor conditionv
+      :initform (make-condition-variable)))
+  (:documentation "A thread pool that manages thread creation, synchronization, and cleanup."))
+
+(defun thread-alive-p ( thread)
+  "Return T if THREAD is alive, NIL otherwise."
+  (bt:thread-alive-p thread))
+
+
+(defmethod initialize-instance :after ((pool thread-pool) &key)
+  "Initialize a thread pool."
+  ;; (declare (ignorable key))
+  (setf (threads pool) (make-hash-table)
+    (mutex pool) (make-mutex)
+    (conditionv pool) (make-condition-variable)))
+
+(defparameter *threads* (make-instance 'thread-pool)
+  "A hash table that stores active threads by their thread IDs.")
+
+(defun get-thread (name)
+  "Get a thread from the thread pool by its ID."
+  (gethash name (threads *threads*)))
+
+(defun create-thread (function  &rest args)
+  "Create and start a new thread, executing FUNCTION with ARGS."
+  (let ((thread (bt:make-thread (lambda () (apply function args)))))
+    (setf (gethash (bt:thread-name thread) (threads *threads*)) thread)
+    thread))
+
+(defun destroy (thread )
+  "Destroy a thread and remove it from the active threads hash table."
+  (remhash (bt:thread-name thread) (threads *threads*))
+  (bordeaux-threads:interrupt-thread  thread (lambda () (sb-thread:join-thread  thread ))))
+
+(defun hash-table-values (hash-table)
+  "Return a list of the values in HASH-TABLE."
+  (loop for key being the hash-keys of hash-table
+    collect (gethash key hash-table)))
+(defun destroy-all-threads ()
+  "Destroy all active threads."
+  (bt:with-lock-held ((mutex *threads*))
+    (mapc #'destroy (hash-table-values
+                      (threads *threads*)))))
+
+;; (maphash (lambda (id thread)
+;;            (declare (ignorable id))
+
+;;            (destroy thread )) (threads *threads*))
+;; (setf (threads *threads*) (make-hash-table)))
+
+;;;; Mutexes and condition variables
+
+;; (bt:defcondition condition-variable-error (error)
+;;   ()
+;;   (:report (lambda (condition stream)
+;;              (format stream "Condition variable error: ~A" condition))))
 
 (defmacro with-mutex (mutex &body body)
   "Execute BODY while holding the MUTEX."
@@ -61,10 +110,6 @@
 ;;     (progn
 ;;       (apply body))))
 
-
-(defun make-condition-variable ()
-  "Create a new condition variable."
-  (bt:make-condition-variable))
 
 (defun wait-on-condition (condition mutex &optional timeout)
   "Wait for the CONDITION variable while releasing the MUTEX.
@@ -80,64 +125,48 @@
   "Signal the CONDITION variable to wake up all waiting threads."
   (sb-thread:condition-broadcast condition))
 
-;;;; Cleanup
-
 (defun cleanup ()
   "Perform cleanup tasks, such as destroying all threads."
-  (destroy-all-threads))
+  (destroy-all-threads ))
 
-;;;; exported symbols
-;;;; (export '(create-thread
-;;;;          destroy-thread
-;;;;          destroy-all-threads
-;;;;          make-mutex
-;;;;          with-mutex
-;;;;          make-condition-variable
-;;;;          wait-on-condition
-;;;;          signal-condition
-;;;;          broadcast-condition
-;;;;          cleanup))
 
-;;; tests
-;;; (defpackage #:thread-tests
-;;   (:use :cl :fiveam))
 
-;; (in-package #:thread-tests)
+;; (defmethod destroy ((pool thread-pool))
+;;   "Destroy a thread and remove it from the active threads hash table."
+;;   (with-mutex (mutex pool)
+;;     (destroy-all-threads (threads pool))))
 
-;; (def-suite thread-tests :description "Test suite for thread management.")
+(defmethod poolcreate-thread ((pool thread-pool) function &rest args)
+  "Create and start a new thread, executing FUNCTION with ARGS."
+  (with-mutex (mutex pool)
+    (let ((thread (create-thread function (threads pool) args)))
+      (setf (gethash (bt:thread-name thread) (threads pool)) thread)
+      thread)))
 
-;; (def-test create-destroy-thread thread-tests
-;;   "Test creating and destroying a thread."
-;;   (let ((test-thread (clevelib:create-thread (lambda () (sleep 1)))))
-;;     (is (typep test-thread 'bt:thread))
-;;     (is (gethash (bt:thread-name test-thread) clevelib:*threads*))
-;;     (clevelib:destroy-thread test-thread)
-;;     (is (null (gethash (bt:thread-name test-thread) clevelib:*threads*)))))
+(defmethod pooldestroy-thread ((pool thread-pool) thread)
+  "Destroy a thread and remove it from the active threads hash table."
+  (with-mutex (mutex pool)
+    (destroy thread )))
 
-;; (def-test mutex-locking thread-tests
-;;   "Test mutex locking and unlocking."
-;;   (let ((test-mutex (clevelib:make-mutex)))
-;;     (is (typep test-mutex 'bt:lock))
-;;     (clevelib:with-mutex (test-mutex)
-;;       (is (bt:lock-held-p test-mutex)))))
+(defmethod pooldestroy-all-threads ((pool thread-pool))
+  "Destroy all active threads."
+  (with-mutex (mutex pool)
+    (destroy-all-threads )))
 
-;; (def-test condition-variable thread-tests
-;;   "Test creating and signaling a condition variable."
-;;   (let ((test-mutex (clevelib:make-mutex))
-;;         (test-condition (clevelib:make-condition-variable)))
-;;     (is (typep test-condition 'bt:condition-variable))
-;;     (bt:make-thread (lambda () (clevelib:wait-on-condition test-condition test-mutex 3)))
-;;     (sleep 1) ;; Give other thread a chance to wait on the condition
-;;     (clevelib:signal-condition test-condition)
-;;     ;; No check here: if thread does not wake up, the test will hang
-;;     ))
-;; (def-test cleanup thread-tests
-;;   "Test cleanup function."
-;;   (let ((test-thread (clevelib:create-thread (lambda () (sleep 1)))))
-;;     (is (typep test-thread 'bt:thread))
-;;     (is (gethash (bt:thread-name test-thread) clevelib:*threads*))
-;;     (clevelib:cleanup)
-;;     (is (null (gethash (bt:thread-name test-thread) clevelib:*threads*)))))
+(defmethod poolwait-on-condition ((pool thread-pool) condition &optional timeout)
+  "Wait for the CONDITION variable while releasing the MUTEX.
+   Optionally, provide a TIMEOUT in seconds."
+  (with-mutex (mutex pool)
+    (wait-on-condition condition (mutex pool) timeout)))
 
-;; ;; To run the tests
-;; (fiveam:run! 'thread-tests)
+(defmethod poolsignal-condition ((pool thread-pool) condition)
+  (with-mutex (mutex pool)
+    (signal-condition condition)))
+
+(defmethod poolbroadcast-condition ((pool thread-pool) condition)
+  (with-mutex (mutex pool)
+    (broadcast-condition condition)))
+
+(defmethod poolcleanup ((pool thread-pool))
+  (with-mutex (mutex pool)
+    (cleanup )))

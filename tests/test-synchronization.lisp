@@ -8,7 +8,7 @@
 (deftest with-event-mutex-test
   (let ((mutex (make-event-mutex)))
     (with-event-mutex mutex
-      (assert (event-mutex-p mutex)))))
+      (is (event-mutex-p mutex)))))
 
 (deftest event-condition-variable-wait-test
   (let ((mutex (make-event-mutex))
@@ -20,7 +20,7 @@
            (start-time (get-internal-real-time)))
       (event-condition-variable-wait condition-variable mutex 2)
       (let ((end-time (get-internal-real-time)))
-        (assert (<= (- end-time start-time) 2000000))))))
+        (is (<= (- end-time start-time) 2000000))))))
 
 (in-package :event-system.synchronization-test)
 
@@ -32,8 +32,8 @@
   (let ((mutex (make-event-mutex)))
     (test "with-event-mutex acquires and releases the mutex"
       (with-event-mutex mutex
-        (assert (bordeaux-threads:mutex-locked-p (event-mutex-mutex mutex))))
-      (assert (not (bordeaux-threads:mutex-locked-p (event-mutex-mutex mutex)))))))
+        (is (bordeaux-threads:mutex-locked-p (event-mutex-mutex mutex))))
+      (is (not (bordeaux-threads:mutex-locked-p (event-mutex-mutex mutex)))))))
 
 (def-test-group event-condition-variable-test-group (synchronization-test-suite)
   (let ((mutex (make-event-mutex))
@@ -47,6 +47,6 @@
       (with-event-mutex mutex
         (let ((start-time (get-internal-real-time)))
           (event-condition-variable-wait condition-variable mutex 2)
-          (assert (< (- (get-internal-real-time) start-time) 2000)))))))
+          (is (< (- (get-internal-real-time) start-time) 2000)))))))
 
 ;;;; END: 8f7e3a1b5c2d

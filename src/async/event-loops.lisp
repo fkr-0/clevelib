@@ -1,6 +1,6 @@
 
 (defpackage :clevelib.event-loops
-  (:use #:cl #:bt #:clevelib.queues :clevelib.core
+  (:use #:cl #:bt #:clevelib.queues :clevelib.core :clevelib.threads
     )
   (:export #:enqueue-event
     #:make-event-loop
@@ -20,16 +20,16 @@
     #:stop-event-loop
     #:toggle-event-loop
     #:error-event-handler
-    ))
+    )
+  (:import-from :cl.state :*state*))
 
 (in-package #:clevelib.event-loops)
 ;; event.lisp
 
-(defvar *error-event-priority* 10)
 ;; (defvar *event-queue* (clevelib.queues:make-event-queue ))
 ;; (defvar *event-loops-active* (make-hash-table :test 'equal))
 ;; (defvar *event-lock* (bt:make-lock "event lock"))
-;; (defvar *event-loops* (make-hash-table :test 'equal))
+(defvar *event-loops* (cl.state::state-event-loops *state*))
 
 
 ;; (defmethod trigger-event ((event event) (target t) (data t))
@@ -49,7 +49,7 @@
 
 (defun process-single-event (event-priority-queue)
   "Process a single event in the given event-priority-queue."
-  (bt:with-lock-held ((clevelib.queues:priority-queue-mutex event-priority-queue))
+  (with-mutex (clevelib.queues:priority-queue-mutex event-priority-queue)
     (let ((event (dequeue event-priority-queue)))
       (when event
         (handler-case
@@ -66,10 +66,10 @@
       :initform nil
       :accessor thread)
     (lock :initarg :lock
-      :initform (bt:make-lock "event lock")
+      :initform (clevelib.threads:make-mutex)
       :accessor lock)
     (condition-var :initarg :condition
-      :initform (bt:make-condition-variable)
+      :initform (clevelib.threads:make-condition-variable)
       :accessor condition-var)
     (active :initarg :active
       :initform nil
@@ -88,7 +88,20 @@
       :documentation "The function that is executed
 in the event loop thread.")
     )(:documentation "An event loop."))
-
+(defmacro with-fps (fps &body body)
+  "Execute the body with the given fps."
+  `(format t "FPS: ~A~%" ,fps)
+  (if `(numberp ,fps)
+    `(let ((fpsreal (/ 1000000.0 ,fps))
+            (time (get-internal-real-time)))
+       (progn ,@body)
+       (let ((time-diff (- (get-internal-real-time) time)))
+         (if (< time-diff fpsreal)
+           ;; (progn
+           ;;   (format t "Sleep: ~A ~%" (- fpsreal time-diff))
+           (sleep (/ (- fpsreal time-diff) 1000000.0))
+           (warn "FPS too low! ~A" time-diff))))
+    `(progn ,@body)))
 (defmethod get-loop-fun ((ev-loop event-loop))
   (lambda ()
     (setf (active ev-loop) t)
@@ -108,15 +121,18 @@ in the event loop thread.")
 
 (defun make-event-loop ()
   "Make an event loop."
-  (make-instance 'event-loop :id (gensym)))
+  (let ((ev-loop (make-instance 'event-loop)))
+    (setf (id ev-loop) (gensym "event-loop-"))
+    (setf (gethash (id ev-loop) *event-loops*) ev-loop)
+    ev-loop))
 
 (defmethod notify-event ((ev-loop event-loop))
   "Notify an event loop that an event has occurred."
-  (bt:condition-notify (condition-var ev-loop)))
+  (clevelib.threads:signal-condition (condition-var ev-loop)))
 
 (defmethod enqueue-event ((ev-loop event-loop) event)
   "Enqueue an event in the event queue."
-  (bt:with-lock-held ((lock ev-loop))
+  (with-mutex (lock ev-loop)
     (clevelib.queues:enqueue event (queue ev-loop))
     (notify-event ev-loop)))
 
@@ -131,13 +147,18 @@ in the event loop thread.")
       (funcall (get-loop-fun ev-loop))))
   ev-loop)
 
+(defmacro curry (function &rest args)
+  "Curry a function with the given arguments."
+  `(lambda (&rest more-args)
+     (apply ,function (append ',args more-args))))
+
 ;; keywords: :id :async :until
 ;; :id -> take loop given by id else create new
 ;; :async -> start loop in new thread (default t)
 ;; :until -> t -> loop forever
 ;;           nil -> loop once
 ;;           callable -> loop until callable returns nil
-(defmacro with-event-loop ((&key (id nil) (async t) (until t)) &body body)
+(defmacro with-event-loop ((&key (id nil) (fps nil) (async t) (until t)) &body body)
   "Execute the body in the event loop with the given id.
 If no id is given, a new event loop is created. If async is
 true, the event loop is started in a new thread. If until is
@@ -148,12 +169,14 @@ returns nil. The event loop is returned."
     `(let ((,ev-loop (if ,id
                        (get-event-loop ,id)
                        (make-event-loop))))
-       (with-slots (loopfun async until) ,ev-loop
-         (setf loopfun (lambda () (progn ,@body)))
+       (with-slots (fps loop-fun async until) ,ev-loop
+         (setf loop-fun (lambda () (progn ,@body)))
          (setf async ,async)
+         (setf fps ,fps)
          (setf until ,until))
-       (start-event-loop ,ev-loop))
-    ev-loop))
+       (start-event-loop ,ev-loop)
+       ,ev-loop)))
+
 
 (defun stop-event-loop (ev-loop)
   "Stop the event loop."
@@ -186,20 +209,7 @@ returns nil. The event loop is returned."
 
 
 
-(defmacro with-fps (fps &body body)
-  "Execute the body with the given fps."
-  `(format t "FPS: ~A~%" ,fps)
-  (if `(numberp ,fps)
-    `(let ((fpsreal (/ 1000000.0 ,fps))
-            (time (get-internal-real-time)))
-       (progn ,@body)
-       (let ((time-diff (- (get-internal-real-time) time)))
-         (if (< time-diff fpsreal)
-           ;; (progn
-           ;;   (format t "Sleep: ~A ~%" (- fpsreal time-diff))
-           (sleep (/ (- fpsreal time-diff) 1000000.0))
-           (warn "FPS too low! ~A" time-diff))))
-    `(progn ,@body)))
+
 
 
 
@@ -210,7 +220,7 @@ returns nil. The event loop is returned."
 
 ;; (add-event-listener :error t #'error-event-handler)
 
-(defvar *event-lock* (bt:make-lock "event lock")) ;; Use reader-writer lock
+;; (defvar *event-lock* (bt:make-lock "event lock")) ;; Use reader-writer lock
 ;; (defun process-loop-events ()
 ;;   "Process the events in the queue."
 ;;   (let ((event-loop-hash (gethash id *event-loops*))) ;; Cache lookup

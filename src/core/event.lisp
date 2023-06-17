@@ -1,37 +1,11 @@
-;; prolly not part of the spec
-;; event.lisp
-;; event.lisp
-;;;; clevelib/events.lisp
-;;;; This module handles event creation, manipulation, and dispatching.
-;; (defpackage :clevelib.core
-;;   (:use :cl :clevelib.synchronization :clevelib.dispatcher :clevelib.handlers ) ;:clevelib.utils)
-;;   (:export :event
-;;     :make-event
-;;     :dispatch-event
-;;     :add-event-listener
-;;     :trigger-event
-;;     :event-listener
-;;     :event-listener-event
-;;     :event-listener-target
-;;     :event-listener-callback
-;;     :event-listener-filter
-;;     :event-listener-delegate
-;;     :event-type
-;;     :event-target
-;;     :event-timestamp
-;;     :event-data
-;;     :filter-event
-;;     :delegate-event))
-;; (in-package :clevelib.core)
 (defpackage :clevelib.core
-  (:use :cl :clevelib.synchronization)
+  (:use :cl )
   (:export :event
     :make-event
     :register-handler
     :unregister-handler
     :trigger-event
     :find-handlers
-    :*handlers*
     :make-event-listener
     :event-handler
     :filter-event
@@ -43,10 +17,17 @@
     :event-listener-callback
     :event-listener-filter
     :dispatch-event
+    :add-event-listener
     :event-listener-delegate
     :clear-handlers
-    :add-event-listener))
+    :*handlers*
+
+    :make-event-listener)
+  (:import-from :cl.state :*state*))
+
 (in-package :clevelib.core)
+
+(defvar *handlers* (cl.state::state-listeners *state*) "A hash table of event handlers.")
 
 (defclass event ()
   ((type :initarg :type :accessor event-type)
@@ -54,7 +35,6 @@
     (timestamp :initarg :timestamp :accessor event-timestamp)
     (data :initarg :data :accessor event-data)))
 
-(defvar *handlers* (make-hash-table :test 'equal))
 (defgeneric filter-event (event target callback))
 ;; filter events are called before the event is dispatched to the target.
 ;; if the filter returns true, the event is not dispatched to the target.
@@ -64,7 +44,7 @@
 (defgeneric delegate-event (event target callback))
 (defmethod delegate-event (event target callback) t)
 
-(defun make-event-listener (&key event event-type target callback filter delegate)
+(defun make-event-listener (&key event event-type target callback filter delegate )
   (let ((listener (make-instance 'event-listener :event event :event-type event-type :target target :callback callback :filter filter :delegate delegate)))
     (let ((existing-listeners (gethash event *handlers*)))
       (setf (gethash event *handlers*) (cons listener existing-listeners)))))
@@ -86,13 +66,25 @@
   (clrhash *handlers*)
   )
 (defclass event-listener ()
-  ((event :initarg :event :accessor event-listener-event)
-    (event-type :initarg :event-type :accessor event-listener-event-type)
-    (target :initarg :target :accessor event-listener-target)
-    (callback :initarg :callback :accessor event-listener-callback)
-    (filter :initarg :filter :accessor event-listener-filter)
-    (delegate :initarg :delegate :accessor event-listener-delegate)
-    (options :initform (make-hash-table) :type hash-table :initarg :options :accessor event-listener-options)))
+  ((event :initarg :event :accessor event-listener-event
+     :documentation "The event to listen for. If the event is not nil, the event-type is ignored." )
+    (event-type :initarg :event-type :accessor event-listener-event-type
+      :documentation "The event type to listen for.")
+    (target :initarg :target :accessor event-listener-target :documentation "The target object to call
+when the event is dispatched.")
+    (callback :initarg :callback :accessor event-listener-callback :documentation "The callback function to call when the event is dispatched.
+The callback function is called with the event.")
+    (filter :initarg :filter :accessor event-listener-filter
+      :documentation "Filters an event before it is dispatched to the target. If the filter returns
+true, the event is not dispatched to the target. If the filter returns false,
+the event is dispatched to the target.")
+    (delegate :initarg :delegate :accessor event-listener-delegate
+      :documentation "Delegates an event to another object. If the event has a delegate, the delegate
+is called with the event, target, and callback. If the delegate returns true,
+the event is not dispatched to the target. If the delegate returns false, the
+event is dispatched to the target.")
+    (options :initform (make-hash-table) :type hash-table :initarg :options :accessor event-listener-options
+      :documentation "A hash table of options for the event listener.")))
 
 ;; (defclass event-handler ()
 ;;   ((event-type :initarg :event-type :accessor event-handler-event-type)

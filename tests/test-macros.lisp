@@ -11,6 +11,7 @@
 ;; Test the on macro
 (test on-macro
   (clear-handlers)
+
   (let ((event-target (make-instance 'dummy-target))
          (event-triggered nil))
     (on :test-event event-target (setf event-triggered t))
@@ -118,4 +119,4 @@
     (funcall (defasync test-async
                (setq result 42)))
     (sleep 1) ; Wait for async execution to complete
-    (assert (equal result 42))))
+    (is (equal result 42))))
