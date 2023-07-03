@@ -73,7 +73,9 @@
 (defun destroy (thread )
   "Destroy a thread and remove it from the active threads hash table."
   (remhash (bt:thread-name thread) (threads *threads*))
-  (bordeaux-threads:interrupt-thread  thread (lambda () (sb-thread:join-thread  thread ))))
+  (bordeaux-threads:interrupt-thread
+    thread (lambda () (sb-thread:join-thread
+                        (sb-thread:main-thread)))))
 
 (defun hash-table-values (hash-table)
   "Return a list of the values in HASH-TABLE."
@@ -81,9 +83,9 @@
     collect (gethash key hash-table)))
 (defun destroy-all-threads ()
   "Destroy all active threads."
-  (bt:with-lock-held ((mutex *threads*))
-    (mapc #'destroy (hash-table-values
-                      (threads *threads*)))))
+  ;; (bt:with-lock-held ((mutex *threads*))
+  (mapcar (lambda (x) (destroy x)) (hash-table-values
+                                     (threads  *threads*))));)
 
 ;; (maphash (lambda (id thread)
 ;;            (declare (ignorable id))
@@ -127,7 +129,8 @@
 
 (defun cleanup ()
   "Perform cleanup tasks, such as destroying all threads."
-  (destroy-all-threads ))
+  ;; catch errors here
+  (destroy-all-threads))
 
 
 

@@ -5,7 +5,7 @@
     :fiveam
     :clevelib
     :clevelib.core
-    :clevelib.queues
+    :clevelib.queue
     :clevelib.event-loops
     :clevelib.async
     :clevelib.macros

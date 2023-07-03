@@ -17,6 +17,7 @@
     :make-priority-queue
     :priority
     :priority-queue
+    :priority-queue-empty-p
     :event-queue-mutex
     :priority-queue-mutex
     :enqueue
@@ -53,6 +54,11 @@ events enqueued with the normal priority."))
     PRIORITY - the priority of the queue, either :high or :normal
 defaults to :normal"
   (make-instance 'priority-queue ))
+
+(defmethod priority-queue-empty-p ((queue priority-queue))
+  "Return true if the priority-queue is empty, false otherwise
+    QUEUE - the priority queue to check"
+  (null (gethash (priority queue) (queue queue))))
 
 (defmethod enqueue-prio ((queue priority-queue) event)
   "Enqueue an event to the priority-queue

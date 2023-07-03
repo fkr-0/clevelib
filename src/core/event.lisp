@@ -3,6 +3,7 @@
   (:export :event
     :make-event
     :register-handler
+    :event-type
     :unregister-handler
     :trigger-event
     :find-handlers
@@ -20,14 +21,14 @@
     :add-event-listener
     :event-listener-delegate
     :clear-handlers
-    :*handlers*
+    :*listeners*
 
     :make-event-listener)
   (:import-from :cl.state :*state*))
 
 (in-package :clevelib.core)
 
-(defvar *handlers* (cl.state::state-listeners *state*) "A hash table of event handlers.")
+(defvar *listeners* (cl.state::state-listeners *state*) "A hash table of event handlers.")
 
 (defclass event ()
   ((type :initarg :type :accessor event-type)
@@ -46,8 +47,8 @@
 
 (defun make-event-listener (&key event event-type target callback filter delegate )
   (let ((listener (make-instance 'event-listener :event event :event-type event-type :target target :callback callback :filter filter :delegate delegate)))
-    (let ((existing-listeners (gethash event *handlers*)))
-      (setf (gethash event *handlers*) (cons listener existing-listeners)))))
+    (let ((existing-listeners (gethash event *listeners*)))
+      (setf (gethash event *listeners*) (cons listener existing-listeners)))))
 
 (defun add-event-listener (event-type  target callback &key  filter delegate)
   (make-event-listener :event event-type :event-type event-type :callback callback :target target :filter filter :delegate delegate))
@@ -63,7 +64,7 @@
 
 (defun clear-handlers ()
   "Clears all handlers."
-  (clrhash *handlers*)
+  (clrhash *listeners*)
   )
 (defclass event-listener ()
   ((event :initarg :event :accessor event-listener-event
@@ -105,13 +106,13 @@ event is dispatched to the target.")
 
 ;; (defun register-handler (event-type callback &key target options)
 ;;   (let ((handler (make-event-handler event-type callback :target target :options options)))
-;;     (setf (gethash event-type *handlers*)
-;;       (cons handler (gethash event-type *handlers*)))))
+;;     (setf (gethash event-type *listeners*)
+;;       (cons handler (gethash event-type *listeners*)))))
 
 ;; (defun unregister-handler (event-type callback &key target options)
 ;;   (let ((handler (make-event-handler event-type callback :target target :options options)))
-;;     (setf (gethash event-type *handlers*)
-;;       (remove handler (gethash event-type *handlers*) :test #'equal))))
+;;     (setf (gethash event-type *listeners*)
+;;       (remove handler (gethash event-type *listeners*) :test #'equal))))
 
 (defun trigger-event (event-type &rest args)
   (let ((event (apply #'make-event event-type args)))
@@ -119,7 +120,7 @@ event is dispatched to the target.")
 
 
 (defun find-handlers (event-type &key target)
-  (let ((handlers (gethash event-type *handlers*)))
+  (let ((handlers (gethash event-type *listeners*)))
     ;; (format t "Finding handlers for ~A~%" event-type)
     ;; (format t "Handlers: ~A~%" handlers)
     (remove-duplicates
@@ -142,6 +143,6 @@ event is dispatched to the target.")
           (target (event-target event))
           (handlers (find-handlers event-type :target target)))
     ;; (format t "Dispatching event ~A to ~A handlers~%" event (length handlers))
-    ;; (format t "Handlers: ~A~%" *handlers*)
+    ;; (format t "Handlers: ~A~%" *listeners*)
     (dolist (handler handlers)
       (funcall (event-listener-callback handler) event))))
