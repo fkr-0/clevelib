@@ -11,9 +11,12 @@
                  :serial t
                  :components ((:file "packages")
                                (:file "test-clevelib")
+                               (:file "test-defloop")
                                (:file "test-macros")
                                (:file "test-threads")
-                               (:file "test-queues")))))
+                               (:file "test-queues")
+                               (:file "test-channels")
+                               ))))
 
 ;; The following would not return the right exit code on error, but still 0.
 ;; :perform (test-op (op _) (symbol-call :fiveam :run-all-tests))

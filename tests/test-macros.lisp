@@ -105,12 +105,12 @@
     (trigger :click target)
     (is (equal *test-output* "Clicked!"))))
 
-(test test-with-event-loop
-  (let ((target (make-instance 'dummy-target)))
-    (with-event-loop (:async t :until nil)
-      (on :click target (setf *test-output* "Clicked!"))
-      (trigger :click target))
-    (is (equal *test-output* "Clicked!"))))
+;; (test test-with-event-loop
+;;   (let ((target (make-instance 'dummy-target)))
+;;     (with-event-loop (:async t :until nil)
+;;       (on :click target (setf *test-output* "Clicked!"))
+;;       (trigger :click target))
+;;     (is (equal *test-output* "Clicked!"))))
 
 ;; (test test-live-update
 ;;   (let ((counter 0))

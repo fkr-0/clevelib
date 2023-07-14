@@ -4,6 +4,8 @@
   (:use :common-lisp
     :fiveam
     :clevelib
+    :clevelib.event-system
+    :clevelib.channel
     :clevelib.core
     :clevelib.queue
     :clevelib.event-loops

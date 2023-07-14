@@ -3,6 +3,7 @@
   (:export :priority-queue
     :queue-empty-p
     :enqueue
+    :queue
     :dequeue-wait
     :make-queue
     :queue-lock
@@ -41,6 +42,18 @@
       (incf (counter queue))
       (bt:condition-notify (item-added queue)))))
 
+(defun pop-queue (queue)
+  (let ((item (car (last queue))))
+    (setf queue (subseq   queue 0 (- (length queue) 1)))
+    (values queue item)))
+
+(defmethod pop-prio-q ((queue priority-queue) queue-slot)
+  (multiple-value-bind (new-q item)
+    (pop-queue (slot-value queue queue-slot))
+    (setf (slot-value queue queue-slot) new-q)
+    item)
+  )
+
 (defmethod dequeue-wait ((queue priority-queue))
   "Wait until an item is available."
   (bt:with-lock-held ((queue-lock queue))
@@ -50,8 +63,10 @@
       do (bt:condition-wait (item-added queue) (queue-lock queue)))
     (decf (counter queue))
     (if (high-items queue)
-      (pop (high-items queue))
-      (pop (normal-items queue)))))
+      (pop-prio-q  queue 'high-items)
+      (pop-prio-q queue 'normal-items))))
+
+
 
 (defmethod dequeue-no-wait ((queue priority-queue))
   "Return nil if no item is available."
@@ -59,8 +74,8 @@
     (when (or (high-items queue) (normal-items queue))
       (decf (counter queue))
       (if (high-items queue)
-        (pop (high-items queue))
-        (pop (normal-items queue))))))
+        (pop-prio-q queue 'high-items)
+        (pop-prio-q queue 'normal-items)))))
 
 (defmethod dequeue ((queue priority-queue) &optional (wait t))
   "If wait is true, wait until an item is available. If wait is false, return

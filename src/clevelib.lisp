@@ -1,6 +1,7 @@
 (defpackage :clevelib
-  (:use :cl :bt :log4cl :clevelib.core :clevelib.macros)
-  (:export :main
+  (:use :cl :bt :log4cl :clevelib.core :clevelib.macros :clevelib.event-system)
+  (:export
+
 
     ))
 
