@@ -28,9 +28,8 @@
     (conditionv pool) (make-condition-variable)))
 
 
+
 ;;; Primitives
-
-
 (defmethod poolcreate-thread ((pool thread-pool) function &rest args)
   "Create and start a new thread, executing FUNCTION with ARGS."
   (with-mutex (mutex pool)
@@ -42,8 +41,6 @@
   "Destroy a thread and remove it from the active threads hash table."
   (with-mutex (mutex pool)
     (destroy thread )))
-
-
 
 (defmethod poolwait-on-condition ((pool thread-pool) condition &optional timeout)
   "Wait for the CONDITION variable while releasing the MUTEX.
@@ -70,19 +67,14 @@
 ;;; around. The thread pool is created when the library is loaded.
 ;;; The thread pool is destroyed when the library is unloaded.
 ;;;
-
-
-
 (defun make-thread-pool (&key (thread-limit 0))
   "Create a new thread pool with THREAD-LIMIT threads."
   (make-instance 'thread-pool :thread-limit thread-limit))
 
-
-
 (defmethod start-thread ((pool thread-pool) function &key (description t))
   (when (and (< 0 (thread-limit pool)) (= (thread-count pool) (thread-limit pool)))
     (error "Thread pool is at max size"))
-  (let* ((t-name (format nil "pool-~d~a" (thread-count pool)
+  (let* ((t-name (format nil "[P~d|~d]<~a>" (thread-count pool) (thread-limit pool)
                    (if (not (eq t description)) description "")))
           (thread (bt:make-thread
                     (lambda ()
@@ -105,6 +97,12 @@
       (error "New size is less than current thread count"))
     (setf (thread-limit pool) new-size))) ;; set the limit
 
+;; join-pool-threads
+(defmethod join-pool-threads ((pool thread-pool))
+  "Wait for all threads in the pool to finish."
+  (with-mutex (mutex pool)
+    (loop while (plusp (thread-count pool))
+      do (wait-on-condition (conditionv pool) (mutex pool)))))
 
 (defmethod stop-thread ((pool thread-pool) thread)
   "Stop a thread and remove it from the pool."

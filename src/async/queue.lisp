@@ -23,6 +23,10 @@
     (item-added  :accessor item-added :initform (bt:make-condition-variable)))
   (:documentation "A priority queue."))
 
+(defmethod print-object ((queue priority-queue) stream)
+  (print-unreadable-object (queue stream :type t :identity t)
+    (format stream "Q[~A]" (normal-items queue))))
+
 (defun make-queue ()
   "Create a new priority queue."
   (make-instance 'priority-queue))

@@ -16,7 +16,8 @@
   :serial t
   :components ((:module "./src"
                  :serial t
-                 :components ((:file "core/state")
+                 :components ((:file "hierarchy")
+                               (:file "core/state")
                                (:file "async/threads")
                                (:file "async/thread-pool")
                                (:file "./event-system")

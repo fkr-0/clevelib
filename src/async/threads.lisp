@@ -12,6 +12,7 @@
     :destroy
     :start-thread
     :destroy-all-threads
+    :join-pool-threads
     :thread-alive-p
     :create-thread
     :set-thread-name
@@ -102,7 +103,9 @@
 (defun wait-on-condition (condition mutex &optional timeout)
   "Wait for the CONDITION variable while releasing the MUTEX.
    Optionally, provide a TIMEOUT in seconds."
-  (bt:with-timeout (timeout)
+  (if timeout
+    (bt:with-timeout (timeout)
+      (bt:condition-wait condition mutex))
     (bt:condition-wait condition mutex)))
 
 (defun signal-condition (condition)

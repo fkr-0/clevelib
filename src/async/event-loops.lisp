@@ -1,10 +1,11 @@
 
 (defpackage :clevelib.event-loops
-  (:use #:cl #:bt #:clevelib.queue :clevelib.core :clevelib.threads :clevelib.event-system
+  (:use #:cl #:bt #:clevelib.queue  :clevelib.threads :clevelib.event-system
     )
   (:export #:enqueue-event
     #:make-event-loop
     #:async
+    #:stat-loop
     #:defloop
     #:thread
     #:active
@@ -24,6 +25,7 @@
     #:trigger-error-event
     #:process-loop-events
     #:start-event-loop
+    #:state
     #:stop-event-loop
     #:toggle-event-loop
     #:error-event-handler
@@ -33,10 +35,10 @@
 (in-package #:clevelib.event-loops)
 
 (defclass evloop ()
-  (     (i-queue :initarg :i-queue
-          :initform (make-queue)
-          :accessor i-queue
-          :documentation "The input queue of the event loop.
+  ((i-queue :initarg :i-queue
+     :initform (make-queue)
+     :accessor i-queue
+     :documentation "The input queue of the event loop.
 The loop function is called with the event as argument.")
     (state
       :initform :initialized
@@ -52,10 +54,6 @@ of the loop function is enqueued here if it is not equal nil.")
       :initform nil
       :accessor thread
       :documentation "The thread that executes the event loop.")
-    ;; (active :initarg :active
-    ;;   :initform nil
-    ;;   :accessor active
-    ;;   :documentation "If true, the event loop is active.")
     (fps :initform nil
       :initarg :fps
       :accessor fps)
@@ -71,6 +69,12 @@ otherwise it will return nil if no event is available.")
       :documentation "The function that is executed
 in the event loop thread."))
   (:documentation "An event loop."))
+
+(defmethod stat-loop ((evloop evloop))
+  "Return plist of stats for each loop in the event system."
+  (list (sb-thread:thread-name (slot-value evloop 'CLEVELIB.EVENT-LOOPS:THREAD))
+    (slot-value evloop 'CLEVELIB.EVENT-LOOPS:STATE)))
+
 
 (defmacro with-fps (fps &body body)
   "Execute the body with the given fps."
@@ -94,10 +98,11 @@ in the event loop thread."))
       (let* ((ev (dequeue (i-queue evloop) (wait evloop)))
               (r (funcall (loop-function evloop) ev))
               (o-l (o-queue evloop)))
-        (when o-l
+        (when (and o-l r)
           (enqueue o-l r)
           )
         (when (eq ev :quit)
+          (format t "~A: Quit event received.~%" (thread evloop))
           (setf (state evloop) :stopped)
           (return-from run))
         )
@@ -222,21 +227,19 @@ and then stop."
          (out-queue-sym (intern (string-upcase(format nil "~A-out-queue" name))))
          (in-queue-sym (intern (string-upcase(format nil "~A-in-queue" name))))
          (state-sym (intern (string-upcase(format nil "~A-state" name))))
-         (rendered-fun `(lambda (,event-arg)
-                          ,@body))
-         )
+         (rendered-fun `(lambda (,event-arg) ,@body)))
     `(progn
-       (let (
-              (inst (make-instance 'evloop :wait ,wait :fps ,fps :loop-fun ,rendered-fun))
-
-              )
+       (let ((inst (make-instance 'evloop :wait ,wait :fps ,fps :loop-fun ,rendered-fun)))
          ;; (defparameter ,thread-sym (clevelib.event-loops:make-event-loop))
+         (defgeneric ,run-meth (sys))
          (defmethod ,run-meth ((sys clevelib.event-system:event-system))
            ;; (format t "dud inst:~a sys:~a" inst sys)
            (clevelib.event-system:idempotent-add-loops sys inst)
-           (start-thread (clevelib.event-system:event-system-pool sys)
-             (lambda ()(run inst)) :description ,(format nil "~A-loop" name))
-           )
+           (setf  (thread inst)
+             (start-thread (clevelib.event-system:event-system-pool sys)
+               (lambda ()(run inst))
+               :description ,(format nil "~A-LOOP" name))))
+         (defgeneric ,stop-meth (sys))
          (defmethod ,stop-meth((sys clevelib.event-system:event-system)))
          (stop inst)
          (defmethod ,out-queue-sym((sys clevelib.event-system:event-system))
@@ -254,11 +257,8 @@ and then stop."
          (when ,output-queue
            (setf (o-queue inst) ,output-queue))
          ;; (output-queue ,thread-sym) ,output-queue)))
-         (when ,(and run (not (null mgr))
-                  `(,run-meth ,mgr))
-           )))))
-(defloop no-1 event ()
-  (format t "no2 ~a" event))
+         `(declare (ignorable run-meth thread-sym stop-meth out-queue-sym in-queue-sym state-sym))
+         (when ,(and run (not (null mgr)) `(,run-meth ,mgr)))))))
 
 ;; (let (eve (make-instance 'clevelib.event-system:event-system)
 ;;          (x 0))

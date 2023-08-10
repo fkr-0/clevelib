@@ -4,6 +4,7 @@
     :make-event-handler
     :register-handler
     :unregister-handler
+    
     :call-handler
     :find-handlers))
 (in-package :clevelib.handlers)
