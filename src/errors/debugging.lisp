@@ -53,7 +53,7 @@
   (format t "Event Queue:~%")
   (with-locked-queue (*event-queue*)
     (loop for event across (queue-contents *event-queue*)
-          do (format t "  - ~A~%" event))))
+      do (format t "  - ~A~%" event))))
 
 (defun inspect-listeners ()
   "Displays the registered event listeners for debugging purposes."
@@ -61,15 +61,15 @@
   (maphash (lambda (event listeners)
              (format t "  - ~A:~%" event)
              (loop for listener in listeners
-                   do (format t "    - ~A~%" listener)))
-           *event-listeners*))
+               do (format t "    - ~A~%" listener)))
+    *event-listeners*))
 
 (defun inspect-handlers ()
   "Displays the registered event handlers for debugging purposes."
   (format t "Event Handlers:~%")
   (maphash (lambda (event handler)
              (format t "  - ~A: ~A~%" event handler))
-           *event-handlers*))
+    *event-handlers*))
 
 (defun inspect-propagation-state ()
   "Displays the current state of event propagation for debugging purposes."
@@ -84,3 +84,24 @@
   debugging."
   ;; TODO: Implement reset functionality for the event system
   )
+
+(defun print-api ()
+  "Prints the API details of all source files in terms of functions, methods, generics, classes, and macros."
+  (dolist (file (directory "*.lisp"))
+    (format t "Source File: ~a~%" (pathname-name file))
+    (with-open-file (stream file)
+      (loop for sexp = (read stream nil nil) while sexp do
+        (when (member (first sexp) '(defun defmethod defgeneric defclass defmacro))
+          (let ((category (first sexp))
+                 (name (second sexp))
+                 (args (if (listp (third sexp)) (third sexp) nil))
+                 (doc (if (stringp (third sexp)) (third sexp) (if (stringp (fourth sexp)) (fourth sexp) nil))))
+            (format t "Category: ~a, Name: ~a, Args: ~a, Doc: ~a~%" category name args doc)))))
+    (format t "API printing completed.~%"))
+
+
+  ;; (defun trigger-error-event (event target)
+  ;;   (tri event target :priority *error-event-priority*))
+
+
+  ;; (add-event-listener :error t #'error-event-handler)

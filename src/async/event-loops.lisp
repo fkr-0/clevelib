@@ -112,105 +112,10 @@ in the event loop thread."))
 ;; TODO typecase and proper quit event class
 (defmethod stop ((evloop evloop))
   "Stop the event loop by enqueuing the :quit event.
-The event loop will finish
-processing the current event
-and then stop."
+The loop will process events until the :quit event
+is dequeued. It will dispatch it and terminate afterwards"
   (when (eq (state evloop) :running)
     (enqueue (i-queue evloop) :quit)))
-
-
-
-;; (defmethod notify-event ((ev-loop event-loop))
-;;   "Notify an event loop that an event has occurred."
-;;   (clevelib.threads:signal-condition (condition-var ev-loop)))
-
-;; (defmethod enqueue-event ((ev-loop event-loop) event)
-;;   "Enqueue an event in the event queue."
-;;   (with-mutex (lock ev-loop)
-;;     (clevelib.queue:enqueue  (queue ev-loop) event)
-;;     ;; (notify-event ev-loop)
-;;     ))
-
-
-
-
-(defmacro curry (function &rest args)
-  "Curry a function with the given arguments."
-  `(lambda (&rest more-args)
-     (apply ,function (append ',args more-args))))
-
-;; (defmacro with-event-loop ((&key (id nil) (fps nil) (async t) (until t)) &body body)
-;;   "Execute the body in the event loop with the given id.
-;; If no id is given, a new event loop is created. If async is
-;; true, the event loop is started in a new thread. If until is
-;; true, the event loop is executed until the body returns. If until
-;; is a callable, the event loop is executed until the callable
-;; returns nil. The event loop is returned."
-;;   (let ((ev-loop (gensym)))
-;;     `(let ((,ev-loop (if ,id
-;;                        (get-event-loop ,id)
-;;                        (make-event-loop))))
-;;        (with-slots (fps loop-fun async until) ,ev-loop
-;;          (setf loop-fun (lambda () (progn ,@body)))
-;;          (setf async ,async)
-;;          (setf fps ,fps)
-;;          (setf until ,until))
-;;        (start-event-loop ,ev-loop)
-;;        ,ev-loop)))
-
-
-
-
-;; (defun trigger-error-event (event target)
-;;   (tri event target :priority *error-event-priority*))
-
-(defun error-event-handler (event target)
-  ;; Define custom error handling logic here
-  (format t "An error occurred in the event '~A' with target '~A'." event target))
-
-;; (add-event-listener :error t #'error-event-handler)
-
-;; (defvar *event-lock* (bt:make-lock "event lock")) ;; Use reader-writer lock
-;; (defun process-loop-events ()
-;;   "Process the events in the queue."
-;;   (let ((event-loop-hash (gethash id *event-loops*))) ;; Cache lookup
-;;     (loop
-;;       (let ((event (bt:with-recursive-lock-held (*event-lock*)
-;;                      (dequeue *event-queue*))))
-;;         (when event
-;;           (trigger-event event (event-target event) (event-data event)))))))
-
-;; (defmacro defloop (name &key (loop-fun nil loop-fun-p)
-;;                     (fps nil fps-p)
-;;                     (async t async-p)
-;;                     (until t until-p))
-;;   "Define an event loop with a name, optional loop function, fps, async flag and until flag."
-;;   (let ((loop-sym (intern (format nil "~A-LOOP" name))))
-;;     `(progn
-;;        (defparameter ,loop-sym (clevelib.event-loops:make-event-loop))
-;;        (defmethod ,name ((tui tui))
-;;          (setf (clevelib.event-loops:loop-fun ,loop-sym)
-;;            ,(if loop-fun-p loop-fun '(lambda () nil)))
-;;          (setf (clevelib.event-loops:fps ,loop-sym) ,fps)
-;;          (setf (clevelib.event-loops:async ,loop-sym) ,async)
-;;          (setf (clevelib.event-loops:until ,loop-sym) ,until)
-;;          (when ,fps-p
-;;            (setf (clevelib.event-loops:loop-fun ,loop-sym)
-;;              (clevelib.event-loops:curry
-;;                (clevelib.event-loops:make-fps-loop ,fps)
-;;                (clevelib.event-loops:loop-fun ,loop-sym))))
-;;          (when ,async-p
-;;            (setf (clevelib.event-loops:loop-fun ,loop-sym)
-;;              (clevelib.event-loops:curry
-;;                (clevelib.event-loops:make-async-loop)
-;;                (clevelib.event-loops:loop-fun ,loop-sym))))
-;;          (when ,until-p
-;;            (setf (clevelib.event-loops:loop-fun ,loop-sym)
-;;              (clevelib.event-loops:curry
-;;                (clevelib.event-loops:make-until-loop ,until)
-;;                (clevelib.event-loops:loop-fun ,loop-sym))))
-;;          (clevelib.event-loops:start-event-loop ,loop-sym)
-;;          ,loop-sym))))
 
 (defmacro defloop (name event-arg (&key
                                     (run t )
@@ -220,7 +125,50 @@ and then stop."
                                     (fps nil )
                                     (mgr nil ))
                     &body body)
-  "Define an event loop with a name, optional loop function, fps, async flag and until flag."
+  "Define an event loop macro with the given name and @BODY operating on
+  events EVENT-ARG dequeued from INPUT-QUEUE and enqueuing result values != NIL
+  on OUTPUT-QUEUE.
+  
+  Allows specifying an event argument, optional run flag, input queue, 
+  output queue, wait flag, frames per second, and manager.
+  The body is executed in the event loop thread. The event argument
+  is passed to the body.
+
+  Arguments:
+  NAME: The name of the event loop.
+  EVENT-ARG: The name of the event argument.
+  optional keyword arguments:
+  RUN: If true, the event loop is started immediately.
+  INPUT-QUEUE: The input queue of the event loop. If not specified a
+               new queue instance is created and attached. @BODY operates on
+               EVENT-ARG dequeued from INPUT-QUEUE.
+  OUTPUT-QUEUE: The output queue of the event loop. If not specified a
+               new queue instance is created and attached. The last or 
+               returned value of @BODY is enqueued to output-queue if it does not
+               equal NIL.
+  WAIT: If true, the event loop will wait for an event to be enqueued,
+        otherwise it will return NIL if no event is available.
+  FPS: The frames per second of the event loop.
+  MGR: EVENT-SYSTEM that manages the event loop. Defining the mgr
+       allows accessing the loop as member variable and defines helpers implemented
+       as methods dispatching on the Event-System class and allow accessing the loop and
+       thread through name-based methods.
+  @BODY: The body of the event loop. It is executed in the event loop thread.
+         The event argument is passed as EVENT-ARG to the body.
+
+  The macro body specifies depending on NAME:
+    Methods (all dispatching on MGR):
+    - NAME-RUN: Run the event loop.
+    - NAME-STOP: Stop the event loop by enqueuing an :QUIT event and
+                 allowing @BODY to process it in its last iteration.
+    - NAME-OUT-QUEUE: Return the output queue of the event loop.
+    - NAME-IN-QUEUE: Return the input queue of the event loop.
+    - NAME-LOOP: Return the event loop.
+    - NAME-THREAD: Return the thread of the event loop.
+    - NAME-STATE: Return the state of the event loop: One of keywords:
+                  :init :running :error :stopped"
+
+  ;; Generate internal symbols
   (let ((thread-sym (intern (string-upcase (format nil "~A-LOOP" name))))
          (run-meth (intern (string-upcase (format nil "~A-run" name))))
          (stop-meth (intern (string-upcase (format nil "~A-stop" name))))
@@ -228,20 +176,29 @@ and then stop."
          (in-queue-sym (intern (string-upcase(format nil "~A-in-queue" name))))
          (state-sym (intern (string-upcase(format nil "~A-state" name))))
          (rendered-fun `(lambda (,event-arg) ,@body)))
+
+    ;; Define methods on generated symbols
     `(progn
+       ;; Create loop instance
        (let ((inst (make-instance 'evloop :wait ,wait :fps ,fps :loop-fun ,rendered-fun)))
-         ;; (defparameter ,thread-sym (clevelib.event-loops:make-event-loop))
+
+         ;; Define run method
          (defgeneric ,run-meth (sys))
          (defmethod ,run-meth ((sys clevelib.event-system:event-system))
-           ;; (format t "dud inst:~a sys:~a" inst sys)
+
+           ;; Start thread running loop
            (clevelib.event-system:idempotent-add-loops sys inst)
            (setf  (thread inst)
              (start-thread (clevelib.event-system:event-system-pool sys)
                (lambda ()(run inst))
                :description ,(format nil "~A-LOOP" name))))
+
+         ;; Define stop method
          (defgeneric ,stop-meth (sys))
          (defmethod ,stop-meth((sys clevelib.event-system:event-system)))
          (stop inst)
+
+         ;; Accessors
          (defmethod ,out-queue-sym((sys clevelib.event-system:event-system))
            (o-queue inst))
          (defmethod ,in-queue-sym((sys clevelib.event-system:event-system))
@@ -250,51 +207,16 @@ and then stop."
            inst)
          (defmethod ,state-sym((sys clevelib.event-system:event-system))
            (state inst))
-         ;; (format t "~a" inst)
-         ;; TODO maybe typecheck queues?
+
+         ;; Set queues if provided
          (when ,input-queue
            (setf (i-queue inst) ,input-queue))
          (when ,output-queue
            (setf (o-queue inst) ,output-queue))
-         ;; (output-queue ,thread-sym) ,output-queue)))
+
+         ;; Ignore temporaries
          `(declare (ignorable run-meth thread-sym stop-meth out-queue-sym in-queue-sym state-sym))
+
+         ;; Run if specified
          (when ,(and run (not (null mgr)) `(,run-meth ,mgr)))))))
 
-;; (let (eve (make-instance 'clevelib.event-system:event-system)
-;;          (x 0))
-;;     (defloop no-1 evevevent ()
-;;       (setf x evevevent)
-;;       (format nil "no2 ~a" evevevent))
-;;     (no-1-run (make-instance 'clevelib.event-system:event-system))
-
-
-
-;;     )
-
-
-;; (defloop axx swob ()
-;;   (format t "swob ~a" swob))
-;; (no-1-run (make-instance 'clevelib.event-system:event-system))
-;; (axx-in-queue)
-;; (axx-run (make-instance 'clevelib.event-system::event-system))
-;; (defmacro dudu (name) (intern (symbol-name name) :keyword))
-;; (defmacro defthread (name &key (loop-fun nil loop-fun-p)
-;;                            (input-queue nil input-queue-p)
-;;                            (output-queue nil output-queue-p)
-;;                            async)
-;;   "Define a thread with a name, optional loop function, input queue, output queue and async flag."
-;;   (let ((thread-sym (intern (format nil "~A-THREAD" name))))
-;;     `(progn
-;;        (defparameter ,thread-sym (clevelib.event-loops:make-event-loop))
-;;        (defmethod ,name ((tui tui))
-;;          (setf (clevelib.event-loops:loop-fun ,thread-sym)
-;;                ,(if loop-fun-p loop-fun '(lambda () nil)))
-;;          (setf (clevelib.event-loops:async ,thread-sym) ,async)
-;;          (when ,input-queue-p
-;;            (setf (clevelib.event-loops:input-queue ,thread-sym) ,input-queue))
-;;          (when ,output-queue-p
-;;            (if (boundp ',output-queue)
-;;                (setf (clevelib.event-loops:output-queue ,thread-sym) ,output-queue)
-;;                (setf ,output-queue (clevelib.event-loops:make-queue)
-;;                      (clevelib.event-loops:output-queue ,thread-sym) ,output-queue)))
-;;          (clevelib.event-loops:start-event-loop ,thread-sym)))))
