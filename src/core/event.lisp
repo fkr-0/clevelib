@@ -46,11 +46,38 @@
 (defmethod delegate-event (event target callback) t)
 
 (defun make-event-listener (&key event event-type target callback filter delegate )
+  "Creates an event listener. The event listener is added to the global event
+listener hash table. The event listener is returned.
+  Arguments:
+    event - The event to listen for. If the event is not nil, the event-type is ignored.
+    event-type - The event type to listen for.
+    target - The target object to call when the event is dispatched.
+    callback - The callback function to call when the event is dispatched. The callback function is called with the event.
+    filter - Filters an event before it is dispatched to the target. If the filter returns true, the event is not dispatched to the target. If the filter returns false, the event is dispatched to the target.
+    delegate - Delegates an event to another object. If the event has a delegate, the delegate is called with the event, target, and callback. If the delegate returns true, the event is not dispatched to the target. If the delegate returns false, the event is dispatched to the target.
+  Returns:
+    The event listener.
+  Example:
+    (make-event-listener :event-type :my-event :target my-object :callback #'my-callback)
+    (make-event-listener :event (make-event :my-event) :target my-object :callback #'my-callback)
+    (make-event-listener :event-type :my-event :target my-object :callback #'my-callback :filter #'my-filter)"
   (let ((listener (make-instance 'event-listener :event event :event-type event-type :target target :callback callback :filter filter :delegate delegate)))
     (let ((existing-listeners (gethash event *listeners*)))
       (setf (gethash event *listeners*) (cons listener existing-listeners)))))
 
 (defun add-event-listener (event-type  target callback &key  filter delegate)
+  "Adds an event listener to the global event listener hash table. The event listener is returned.
+  Arguments:
+    event-type - The event type to listen for.
+    target - The target object to call when the event is dispatched.
+    callback - The callback function to call when the event is dispatched. The callback function is called with the event.
+    filter - Filters an event before it is dispatched to the target.
+If the filter returns true, the event is not dispatched to the target. If the filter returns false, the event is dispatched to the target.
+    delegate - Delegates an event to another object. If the event has a delegate, the delegate is called with the event, target, and callback. If the delegate returns true, the event is not dispatched to the target.
+If the delegate returns false, the event is dispatched to the target.
+  Returns:
+    "
+
   (make-event-listener :event event-type :event-type event-type :callback callback :target target :filter filter :delegate delegate))
 ;; (defmethod delegate-event ((event event) target callback)
 ;;   "Delegates an event to another object. If the event has a delegate, the delegate

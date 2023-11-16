@@ -1,5 +1,6 @@
 ;; TODO generalize event handling:
 
+;; define a condition type that generalizes over certain handling options
 ;; (defstruct condition
 ;;   event-type       ; e.g., :click, :keydown
 ;;   target-element   ; e.g., a specific DOM element or identifier
@@ -16,19 +17,27 @@
 ;; (make-condition :event-type :keydown :custom-check (lambda (event) ...))
 (in-package :clevelib.event-system)
 
-(defclass event-handler ()
+(defclass simple-handler ()
   ((event-type :initarg :event-type
-     :accessor event-handler-event-type
-     :documentation "The type of event this handler is for.")
+     :accessor handler-event-type
+     :documentation "The type of event this handler is for. Stored for convenience.")
     (callback :initarg :callback
-      :accessor event-handler-callback
+      :accessor handler-callback
       :documentation "The function to call when the event is triggered. A handlers
-callback function is called with the event as its first argument, and the optional data as its second argument.")
-    (target :initarg :target
-      :accessor event-handler-target
-      :documentation "The target of the event handler.")
+callback function is called with the event as its only argument")))
+
+(defclass priority-handler (simple-handler)
+  ((priority :initarg :priority
+     :accessor handler-priority
+     :documentation "Filter based on assigned event priority"))
+  (:documentation "A priority handler is a function that is assigned to a target object."))
+
+(defclass event-handler (priority-handler)
+  ((target :initarg :target
+     :accessor handler-target
+     :documentation "The target of the event handler.")
     (options :initarg :options
-      :accessor event-handler-options
+      :accessor handler-options
       :documentation "The options for the event handler."))
   (:documentation "An event handler is a function that is assigned to a target object.
 It is called when an event is triggered with the target as its destination. Furthermore,
@@ -48,6 +57,34 @@ the object's handlers are called once, then removed)
 the object's handlers are called once, then removed)
 :once-bubbling - call handler once during bubbling phase, (e.g. when triggering an event on an object,
 the object's handlers are called once, then removed)"))
+
+
+(defgeneric handler-applies (handler event)
+  (:documentation "Check if HANDLER applies to EVENT.")
+  ;; function
+  (:method ((handler function) event)
+    (eq (handler-event-type handler) (event-type event)))
+  ;; simple-handler
+  (:method ((handler simple-handler) event)
+    (eq (handler-event-type handler) (event-type event)))
+  ;; priority-handler
+  (:method ((handler priority-handler) event)
+    (and (eq (handler-event-type handler) (event-type event))
+      (or (not (handler-priority handler))
+        (>= (handler-priority handler) (event-priority event)))))
+  ;; event-handler
+  (:method ((handler event-handler) event)
+    (and (eq (handler-event-type handler) (event-type event))
+      (or (not (handler-priority handler))
+        (>= (handler-priority handler) (event-priority event)))
+      ;; (or (not (handler-target handler)) ;; TODO should not be necessary
+      ;;   (eq (handler-target handler) (event-target event)))
+      (or (not (handler-options handler))
+        (member (event-phase event) (handler-options handler))))))
+
+
+
+
 
 ;; ;; options: :capturing - call handler during capturing phase, (e.g. when triggering an event on an object such as a button,
 ;;  ;; the button's handlers are called first, then the button's parent's handlers, and so on until the root is reached)
@@ -74,3 +111,18 @@ the object's handlers are called once, then removed)"))
 ;; ;; :bubble-only - only call handler during bubbling phase, (e.g. :capture-only t)
 ;; ;;         :capture-all,
 ;;  :bubble-all
+
+(defgeneric run-callback (handler event)
+  (:documentation "Call HANDLER with EVENT as its only argument.")
+  ;; function
+  (:method ((handler function) event)
+    (funcall handler event))
+  ;; simple-handler
+  (:method ((handler simple-handler) event)
+    (funcall (handler-callback handler) event))
+  ;; priority-handler
+  (:method ((handler priority-handler) event)
+    (funcall (handler-callback handler) event))
+  ;; event-handler
+  (:method ((handler event-handler) event)
+    (funcall (handler-callback handler) event)))

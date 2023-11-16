@@ -42,6 +42,7 @@
 (defun call-handler (handler event)
   "Calls the callback function of the handler with the event as argument."
   (format t "Calling handler ~a with event ~a~%" handler event)
+  (log-message "Calling handler ~a with event ~a" handler event)
   (let ((callback (gethash handler *handlers*))) ;; Cache lookup
     (funcall callback event)))
 

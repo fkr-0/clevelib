@@ -10,7 +10,7 @@
   (:export :deflistener
     :trigger
     :on
-    :defevent
+    ;; :defevent
     :trigger-event
     :live-update
     :defasync

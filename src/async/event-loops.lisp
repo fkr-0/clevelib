@@ -7,6 +7,7 @@
     #:async
     #:stat-loop
     #:defloop
+    #:stop
     #:thread
     #:active
     #:until
@@ -93,21 +94,18 @@ in the event loop thread."))
 
 (defmethod run ((evloop evloop))
   (setf (state evloop) :running)
-  (loop
+  (loop while (eq (state evloop) :running) do
     (with-fps (fps evloop)
       (let* ((ev (dequeue (i-queue evloop) (wait evloop)))
               (r (funcall (loop-function evloop) ev))
               (o-l (o-queue evloop)))
+        ;; (format t "Received ~A.~%" ev)
         (when (and o-l r)
           (enqueue o-l r)
           )
         (when (eq ev :quit)
-          (format t "~A: Quit event received.~%" (thread evloop))
-          (setf (state evloop) :stopped)
-          (return-from run))
-        )
-      )
-    ))
+          ;; (format t "~A: Quit event received.~%" (thread evloop))
+          (setf (state evloop) :stopped))))))
 
 ;; TODO typecase and proper quit event class
 (defmethod stop ((evloop evloop))
@@ -115,7 +113,13 @@ in the event loop thread."))
 The loop will process events until the :quit event
 is dequeued. It will dispatch it and terminate afterwards"
   (when (eq (state evloop) :running)
-    (enqueue (i-queue evloop) :quit)))
+    ;; (log-debug "Stopping event loop ~A" (thread evloop))
+    (format t "EXITING LOOP ~A~%" (thread evloop))
+    (enqueue (i-queue evloop) :quit)
+    (setf (state evloop) :stopped)
+    ;; join thread
+    ))
+
 
 (defmacro defloop (name event-arg (&key
                                     (run t )
@@ -128,8 +132,8 @@ is dequeued. It will dispatch it and terminate afterwards"
   "Define an event loop macro with the given name and @BODY operating on
   events EVENT-ARG dequeued from INPUT-QUEUE and enqueuing result values != NIL
   on OUTPUT-QUEUE.
-  
-  Allows specifying an event argument, optional run flag, input queue, 
+
+  Allows specifying an event argument, optional run flag, input queue,
   output queue, wait flag, frames per second, and manager.
   The body is executed in the event loop thread. The event argument
   is passed to the body.
@@ -176,6 +180,11 @@ is dequeued. It will dispatch it and terminate afterwards"
          (in-queue-sym (intern (string-upcase(format nil "~A-in-queue" name))))
          (state-sym (intern (string-upcase(format nil "~A-state" name))))
          (rendered-fun `(lambda (,event-arg) ,@body)))
+    ;; Ignore temporaries
+
+    ;; `(declaim (ftype (function (t) (function)) ,run-meth))
+    `(declare (ignorable  thread-sym stop-meth out-queue-sym in-queue-sym state-sym))
+    `(declare (ignorable  thread-sym stop-meth out-queue-sym in-queue-sym state-sym))
 
     ;; Define methods on generated symbols
     `(progn
@@ -184,6 +193,7 @@ is dequeued. It will dispatch it and terminate afterwards"
 
          ;; Define run method
          (defgeneric ,run-meth (sys))
+         ;; (declare (ignore ,run-meth))
          (defmethod ,run-meth ((sys clevelib.event-system:event-system))
 
            ;; Start thread running loop
@@ -195,16 +205,24 @@ is dequeued. It will dispatch it and terminate afterwards"
 
          ;; Define stop method
          (defgeneric ,stop-meth (sys))
-         (defmethod ,stop-meth((sys clevelib.event-system:event-system)))
-         (stop inst)
+         (defmethod ,stop-meth((sys clevelib.event-system:event-system))
+           (stop inst)
+           ;; (sb-thread:interrupt-thread (thread inst)
+           ;;   (lambda () :dud;; (stop inst)
+           ;;     ))
+           )
 
          ;; Accessors
+         (defmethod ,out-queue-sym(sys))
          (defmethod ,out-queue-sym((sys clevelib.event-system:event-system))
            (o-queue inst))
+         (defgeneric ,in-queue-sym(sys))
          (defmethod ,in-queue-sym((sys clevelib.event-system:event-system))
            (i-queue inst))
+         (defgeneric ,thread-sym (sys))
          (defmethod ,thread-sym((sys clevelib.event-system:event-system))
            inst)
+         (defgeneric ,state-sym (sys))
          (defmethod ,state-sym((sys clevelib.event-system:event-system))
            (state inst))
 
@@ -214,9 +232,7 @@ is dequeued. It will dispatch it and terminate afterwards"
          (when ,output-queue
            (setf (o-queue inst) ,output-queue))
 
-         ;; Ignore temporaries
-         `(declare (ignorable run-meth thread-sym stop-meth out-queue-sym in-queue-sym state-sym))
+         ;; `(declare (ignora run-meth))
 
          ;; Run if specified
-         (when ,(and run (not (null mgr)) `(,run-meth ,mgr)))))))
-
+         (when (and ,run (not (null ,mgr))) (funcall (function ,run-meth) ,mgr))))))

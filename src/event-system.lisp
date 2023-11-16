@@ -1,23 +1,24 @@
 (defpackage :clevelib.event-system
   ;; (:nicknames :cl-es)
   ;; (:documentation "An Event System to facilitate communication between components.")
-  (:use :cl :bt :log4cl :clevelib.hierarchy)
+  (:use :cl :bt :log4cl :clevelib.hierarchy :clevelib.base-system)
   ;; aliases : est
   (:export
     :get-children
     :next-leaf-with-prop
+    :hierarchical-event-target
     :target-children
+    :phasing-event-handler
+    :broadcast-breadth-first
     :hierarchy
     :register
     :unregister
-    :emit-event
     :handlers
     :event-system
     :get-leafs
-    :add-handler
+    :add-system-handler
     :add-target
-    :event-target-emitter
-    :target-emit-event
+    :set-up-handler
     :event-target-register
     :event-target-unregister
     :event-target-children
@@ -31,7 +32,10 @@
     :get-target-path
     :event-data
     :event
+    :defevent
+    :key-event
     :event-time
+    :hierarchical-event-handler
     :make-event
     :idempotent-add-loops
     :event-system-pool
@@ -42,15 +46,26 @@
 
 (in-package :clevelib.event-system)
 
+;; (defun nest-hashes (&rest hashes)
+;;   "Nest the given hashes."
+;;   (let ((result (make-hash-table)))
+;;     (dolist (hash hashes)
+;;       (maphash (lambda (key value)
+;;                  (let ((subhash (gethash key result)))
+;;                    (if subhash
+;;                      (setf (gethash key result) (append subhash value))
+;;                      (setf (gethash key result) value))))
+;;         hash))
+;;     result))
 
-
-;;; Event System
-;;; ============
-;;; The event system is a way to communicate between components asynchronously.
-;;; It is based on the idea of a loop that is running in a thread and that is
-;;; waiting for events to happen. When an event happens, the loop calls the
-;;; associated handlers.
-(defclass event-system ()
+;;; Event System ============ The event system is a way to communicate between
+;;; components asynchronously. It is based on the idea of a loop that is running
+;;; in a thread and that is waiting for events to happen. When an event happens,
+;;; the loop calls the associated handlers. It is modeled after and therefore an
+;;; extension of the event sink. We mainly add a hierarchical arrangement of
+;;; event targets to allow bubbling/nesting/delegation...
+;;; We also use a simple thread pool.
+(defclass event-system (event-sink)
   ((hierarchy :initarg :hierarchy
      :initform (clevelib.hierarchy:make-hierarchy)
      :accessor hierarchy
@@ -58,9 +73,6 @@
     (pool :initform (clevelib.threads:make-thread-pool)
       :accessor event-system-pool
       :documentation "A thread pool to handle asyncronicity.")
-    (handlers :initform (make-hash-table)
-      :accessor handlers
-      :documentation "The event handlers for the system.")
     (loops :initform nil :accessor event-system-loops
       :documentation "A list of loops that allow
 asynchronous event management."))
@@ -92,6 +104,8 @@ asynchronous event management."))
   (declare (type event-system event-system))
   ;; (log-debug "Path: ~a" (path (hierarchy event-system) target))
   (clevelib.hierarchy:path (hierarchy event-system) target))
+
+
 
 (defmethod get-path ((system event-system) object)
   "Get the path from the root to the given object in the given event system."
@@ -155,51 +169,79 @@ property."
     (unless (member loop (event-system-loops event-system) :test #'equal)
       (push loop (event-system-loops event-system)))))
 
-(defmethod add-handler ((system event-system) object event-type callback &key (options :at-target))
+(defmethod add-system-handler ((system event-system) object event-type callback &key (options :at-target) (priority 0))
   "Add an event handler for the given event type to the given object."
   (let ((handler
-          (make-instance 'event-handler
+          (make-instance 'phasing-event-handler
             :event-type event-type
             :callback callback
+            :priority priority
             :options options))
-         (object-handlers (or (gethash object (handlers system))
-                            (setf (gethash object (handlers system))
+         (object-handlers (or (gethash object (sink-handlers system))
+                            (setf (gethash object (sink-handlers system))
                               (make-hash-table)))))
     (setf (gethash event-type object-handlers) handler)))
 
-(defmethod remove-handler ((system event-system) object event-type)
-  "Remove the event handler for the given event type from the given object."
-  (let ((object-handlers (gethash object (handlers system))))
-    (when object-handlers
-      (remhash event-type object-handlers))))
+;; (defmethod remove-handler ((system event-system) object event-type)
+;;   "Remove the event handler for the given event type from the given object."
+;;   (let ((object-handlers (gethash object (handlers system))))
+;;     (when object-handlers
+;;       (remhash event-type object-handlers))))
 
-(defmethod remove-event-handler ((event-system event-system) target type callback &key (options nil))
-  "Remove an event handler from the event system."
-  (declare (type event-system event-system))
-  (let ((handlers (gethash target (handlers event-system))))
-    (setf (gethash target (handlers event-system))
-      (remove-if (lambda (handler)
-                   (and (eq (event-handler-event-type handler) type)
-                     (eq (event-handler-callback handler) callback)
-                     (eq (event-handler-options handler) options)))
-        handlers))))
+;; (defmethod remove-event-handler ((event-system event-system) target type callback &key (options nil))
+;;   "Remove an event handler from the event system."
+;;   (declare (type event-system event-system))
+;;   (let ((handlers (gethash target (handlers event-system))))
+;;     (setf (gethash target (handlers event-system))
+;;       (remove-if (lambda (handler)
+;;                    (and (eq (event-handler-event-type handler) type)
+;;                      (eq (event-handler-callback handler) callback)
+;;                      (eq (event-handler-options handler) options)))
+;;         handlers))))
 ;; (log-debug "Removed event handler ~a from target ~a." handler target)
-(defmethod call-handler ((system event-system)
-                          object event-type event data phase)
+(defmethod call-handler ((system event-system) object event-type event data phase)
   "Call the handler for the given event type on the given object, if it exists and matches the given phase."
-  (let ((handler
-          (gethash event-type (or (gethash object (handlers system))
+  (declare (type event-system system))
+  (log-debug "Look for handler for event ~a on object ~a with data ~a in phase ~a"
+    event-type object data phase)
+  (let ((handler-list
+          (gethash event-type (or (gethash
+                                    (if (symbolp object)
+                                      object
+                                      (target-id object))
+                                    (sink-handlers system))
                                 (make-hash-table)))))
-    (when handler
-      (let ((options (event-handler-options handler)))
-        (when (or (null options)
-                (if (listp options)(member phase options)
-                  (eq options phase)))
-          (let ((callback (event-handler-callback handler)))
-            (when callback
-              (funcall callback event data))
-            (log-debug "Calling handler ~a for event ~a on object ~a with data ~a in phase ~a"
-              handler event-type object data phase)))))))
+    (log-info "GOT FIRST" handler-list)
+    (when handler-list
+      (log-info "GOT second" handler-list)
+      (dolist (handler handler-list)
+        (let ((options (handler-options handler)))
+          (log-info "GOT third" options)
+          (when (or (null options)
+                  (if (listp options)(member phase options)
+                    (eq options phase)))
+            (let ((callback (handler-callback handler)))
+              (when callback
+                (log-debug "Calling handler ~a for event ~a on object ~a with data ~a in phase ~a"
+                  handler event-type object data phase)
+                (funcall callback event data)))))))))
+
+(defmethod broadcast-breadth-first ((event-system event-system) event-type &optional data)
+  "Broadcast the an event of the passed type EVENT-TYPE and data DATA to all the
+objects in the event system, breadth-first.
+if the object has a handler for the event type."
+  (declare (type event-system event-system))
+  (let ((ev (make-instance 'event
+              :type event-type
+              :data data)))
+    (maphash
+      (lambda (object handlers)
+        (when handlers
+          (call-handler event-system object event-type ev data :at-target)))
+      (sink-handlers event-system))))
+;; (let ((objects (clevelib.hierarchy:objects (hierarchy event-system))))
+;;   (dolist (object objects)
+;;     (call-handler event-system object event-type event data :at-target)))
 
 (defmethod dispatch ((system event-system) event)
   "Trigger the given event type on the given target, passing the optional data to the event handler.
@@ -210,6 +252,8 @@ property."
           (event-type (event-type event))
           (path (get-target-path system target)))
     ;; Capturing phase: propagate the event from the root to the target, calling capturing handlers.
+    (log-debug "Dispatching event ~a, type ~a on target ~a with data ~a." event event-type target data)
+    (log-debug "Path: ~a" path)
     (set-phase event :capturing)
     (dolist (object (reverse path))
       (setf (event-current-target event) object)

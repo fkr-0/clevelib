@@ -17,10 +17,11 @@
   :components ((:module "./src"
                  :serial t
                  :components ((:file "hierarchy")
+                               (:file "base-system")
                                (:file "core/state")
                                (:file "async/threads")
                                (:file "async/thread-pool")
-                               (:file "./event-system")
+                               (:file "event-system")
                                (:file "event-target")
                                (:file "event-handler")
                                (:file "event")
