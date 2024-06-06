@@ -3,7 +3,7 @@
 ;; Purpose: This file provides unit tests for the event propagation functions in propagation.lisp.
 ;;
 
-(defpackage :event-propagation-test
+(uiop:define-package :event-propagation-test
   (:use :cl :rt :event-propagation))
 
 (in-package :event-propagation-test)

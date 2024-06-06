@@ -11,11 +11,11 @@
 
 
 (test test-with-mutex
-  (let ((mutex (clevelib.threads:make-mutex))
+  (let ((mutex (clevelib.mutex:make-mutex))
          (result nil))
-    (with-mutex  mutex
+    (clevelib.mutex:with-mutex  mutex
       (setq result 1))
-    (with-mutex mutex
+    (clevelib.mutex:with-mutex mutex
       (setq result (+ result 1)))
     (is (equal result 2))))
 
@@ -24,8 +24,8 @@
   ;; (bt:make-thread
   ;;   (lambda ()
   ;; (format t "Thread started~%")
-  (let ((condition-variable (clevelib.threads:make-condition-variable))
-         (lock (clevelib.threads:make-mutex))
+  (let ((condition-variable (clevelib.cv:make-condition-variable))
+         (lock (clevelib.mutex:make-mutex))
          (result nil))
     (bt:with-recursive-lock-held (lock)
       (bt:make-thread
@@ -35,7 +35,7 @@
           ;; (format t "Thread 2 notifying~%")
           (bt:with-recursive-lock-held (lock)
 
-            (clevelib.threads:signal-condition condition-variable))))
+            (clevelib.cv:signal-condition condition-variable))))
       ;; (format t "Thread 1 waiting~%")
       (bt:with-recursive-lock-held (lock)
 

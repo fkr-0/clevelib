@@ -32,16 +32,16 @@
   (let ((mutex (make-event-mutex)))
     (test "with-event-mutex acquires and releases the mutex"
       (with-event-mutex mutex
-        (is (bordeaux-threads:mutex-locked-p (event-mutex-mutex mutex))))
-      (is (not (bordeaux-threads:mutex-locked-p (event-mutex-mutex mutex)))))))
+        (is (bordeaux-thread:mutex-locked-p (event-mutex-mutex mutex))))
+      (is (not (bordeaux-thread:mutex-locked-p (event-mutex-mutex mutex)))))))
 
 (def-test-group event-condition-variable-test-group (synchronization-test-suite)
   (let ((mutex (make-event-mutex))
          (condition-variable (make-event-condition-variable)))
     (test "event-condition-variable-wait waits for a signal"
-      (bordeaux-threads:make-thread
+      (bordeaux-thread:make-thread
         (lambda ()
-          (bordeaux-threads:with-lock-held ((event-mutex-mutex mutex))
+          (bordeaux-thread:with-lock-held ((event-mutex-mutex mutex))
             (sleep 1)
             (event-condition-variable-notify condition-variable))))
       (with-event-mutex mutex

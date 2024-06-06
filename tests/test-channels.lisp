@@ -11,14 +11,9 @@
   )
 
 (use-package :fiveam)
-;; (use-package :clevelib.channel)
 (def-suite channels
   :in testmain
-  :description "Tests for channels"
-
-  ;; :in-order-to ((test channel-1)
-  ;;               (test channel-2)
-  )
+  :description "Tests for channels")
 
 (in-suite channels)
 ;; FiveAm expect errors: https://common-lisp.net/project/fiveam/#Expecting-errors
@@ -33,14 +28,16 @@
       (loop for i from 1 to 2 do
         (-> channel i)))
 
-    (sleep 0.3)
     (is (= 1 (<- channel)))
     (is (= 2 (<- channel)))
+    (sleep 0.1)
     (channel-close channel)
-    (sleep 0.3)
-    (signals simple-error (-> channel 5))
-    (is (channel-closed channel))
-    ))
+    ;; (sleep 0.3)
+    (handler-bind ((simple-error (lambda (c) (print c))))
+      (signals simple-error (-> channel 5)))
+
+    (is (channel-closed channel))))
+
 (test channel-1-1
   (let ((channel (make-channel)))
     (signals simple-error
@@ -117,7 +114,7 @@
     (is (null values))))
 (test channel-send-receive-2
   (let ((channel (make-channel))
-         (lock (sb-thread:make-mutex))
+         ;; (lock (sb-thread:make-mutex))
          (values '(1 2 3)))
     (gogo (loop for v in values do (progn (-> channel v) ;; (format t "write ~a~%" v)
                                      )))

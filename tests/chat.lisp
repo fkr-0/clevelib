@@ -1,5 +1,5 @@
 ;; Test scenario for the chat application
-(defpackage #:chat-app-test
+(uiop:define-package #:chat-app-test
   (:use #:cl #:clevelib))
 (in-package #:chat-app-test)
 
@@ -106,7 +106,7 @@
     (process-events nil)))
 
 ;; Start the message event loop in a new thread
-(bordeaux-threads:make-thread #'start-message-event-loop)
+(bordeaux-thread:make-thread #'start-message-event-loop)
 
 ;; Simulate user messages being sent
 (simulate-user-message "Alice" "Hello, everyone!")

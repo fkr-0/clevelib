@@ -2,9 +2,11 @@
 (def-suite queue-test-suite
   :description "Test suite for the clevelib.macros package"
   :in testmain
+
   )
 
 (in-suite queue-test-suite)
+(use-package :clevelib.queue)
 
 (test enqueue-normal-priority
   "Test enqueue method with normal priority."
@@ -106,40 +108,40 @@
 (test multi-threaded-queue-test-2
   "Another multi-threaded integration test for the priority queue"
   (let ((queue (make-queue))
-         (*one-fin* nil)
-         (*two-fin* nil)
+         (one-fin nil)
+         (two-fin nil)
          (test-item (cons :high 1)))
 
     ;; Worker 1, dequeue with waiting
     (let ((worker-1 (bt:make-thread
                       (lambda ()
                         (let ((result (dequeue queue)))
-                          (setf *one-fin* result))))))
+                          (setf one-fin result))))))
 
       ;; Worker 2, dequeue without waiting
-      (let ((worker-2 (bt:make-thread
-                        (lambda ()
-                          (let ((result (dequeue-no-wait queue)))
-                            (setf *two-fin* result))))))
+      ;; (let ((worker-2 ))
+      (bt:make-thread
+        (lambda ()
+          (let ((result (dequeue-no-wait queue)))
+            (setf two-fin result))))
+      ;; Sleep a while
+      (sleep 0.1)
 
-        ;; Sleep a while
-        (sleep 2)
+      ;; Check unfinished condition for worker 1
+      (is (not one-fin))
 
-        ;; Check unfinished condition for worker 1
-        (is (not *one-fin*))
+      ;; Check finished condition for worker 2
+      (is (eq two-fin nil))
+      ;; Enqueue an item
+      (enqueue queue (cdr test-item) (car test-item))
+      ;; Wait for worker 1 to finish
+      (bt:join-thread worker-1)
 
-        ;; Check finished condition for worker 2
-        (is (eq *two-fin* nil))
+      ;; Check worker 1 is finished
+      (is (= one-fin 1))
 
-        ;; Enqueue an item
-        (enqueue queue (cdr test-item) (car test-item))
-
-        ;; Wait for worker 1 to finish
-        (bt:join-thread worker-1)
-
-        ;; Check both workers are finished
-        (is (= *one-fin* 1))
-        (is (eq *two-fin* nil))))))
+      ;; Check both workers are finished
+      (is (eq two-fin nil)))))
 
 
 ;; Test that an event can be enqueued and dequeued
@@ -169,3 +171,56 @@
 ;;     (is (= (event-queue-length event-queue) 0))
 ;;     (enqueue event-queue "test-event")
 ;;     (is (= (event-queue-length event-queue) 1))))
+
+
+(test typed-queue
+  (let ((q (make-instance 'typed-queue :type 'number))
+         (q1 (make-instance 'typed-queue :type 'string))
+         (q2 (make-instance 'typed-queue :type 'symbol)))
+
+    (enqueue q 1)
+    (enqueue q 2)
+    (enqueue q2 :dud)
+    (enqueue q1 "dud")
+    (enqueue q 3)
+    (is (equal (dequeue q) 1))
+    (is (equal (dequeue q) 2))
+    (is (equal (dequeue q1) "dud"))
+    (is (equal (dequeue q2) :dud))
+    (is (equal (dequeue q) 3))
+    (handler-case
+      (is (null (dequeue-no-wait q)))
+      (wrong-type-condition (c)
+        (is (eql 'number (expected-type c)))
+        (is (eql 'null (actual-type c)))))))
+
+
+(test typed-queue-w-e
+  (let ((q (make-instance 'typed-queue :type 'integer)))
+    (enqueue q 1)
+    (enqueue q 2)
+    (enqueue q 3)
+    (is (eql (dequeue-no-wait q) 1))
+    (is (eql (dequeue-wait q) 2))
+    (is (eql (dequeue-no-wait q) 3))))
+
+(test wrong-type-error-1
+  (let ((queue (make-instance 'typed-queue :type 'number)))
+    (handler-case
+      (progn
+        (enqueue queue "not a number")
+        (is (eql "not a number" (dequeue queue))))
+      (wrong-type-condition (c)
+        (is (eql 'number (expected-type c)))
+        (is (equalp (type-of "not a number")
+              (actual-type c)))))))
+
+(test wrong-type-error-2
+  (let ((queue (make-instance 'typed-queue :type 'string)))
+    (handler-case
+      (progn
+        (enqueue queue 33)
+        (is nil))
+      (wrong-type-condition (c)
+        (is (eql (type-of 33) (actual-type c)))
+        (is (eql 'string (expected-type c)))))))
