@@ -1,12 +1,9 @@
 (in-package :clevelib-tests)
 (def-suite queue-test-suite
   :description "Test suite for the clevelib.macros package"
-  :in testmain
-
-  )
+  :in testmain)
 
 (in-suite queue-test-suite)
-(use-package :clevelib.queue)
 
 (test enqueue-normal-priority
   "Test enqueue method with normal priority."
@@ -145,24 +142,24 @@
 
 
 ;; Test that an event can be enqueued and dequeued
-;; (test test-enqueue-dequeue-event
-;;   (let ((event-queue (make-event-queue)))
-;;     (enqueue event-queue "test-event")
-;;     (is (equal (dequeue event-queue) "test-event"))))
+(test test-enqueue-dequeue-event
+  (let ((event-queue (make-queue)))
+    (enqueue event-queue "test-event")
+    (is (equal (dequeue event-queue) "test-event"))))
 
 ;; ;; Test that the priority of an event can be changed
 ;; (test test-change-event-priority
-;;   (let ((equeue (make-priority-queue)))
-;;     (enqueue-prio equeue "test-event")
+;;   (let ((equeue (make-queue)))
+;;     (enqueue equeue "test-event" )
 ;;     (change-event-priority equeue :high)
 ;;     (is (equal (priority equeue) :high))))
 
 ;; ;; Test that an event queue can be checked for emptiness
-;; (test test-event-queue-empty-p
-;;   (let ((event-queue (make-event-queue)))
-;;     (is (event-queue-empty-p event-queue))
-;;     (enqueue event-queue "test-event")
-;;     (is (not (event-queue-empty-p event-queue)))))
+(test test-event-queue-empty-p
+  (let ((event-queue (make-queue)))
+    (is (queue-empty-p event-queue))
+    (enqueue event-queue "test-event")
+    (is (not (queue-empty-p event-queue)))))
 
 
 ;; ;; Test that the length of an event queue can be determined

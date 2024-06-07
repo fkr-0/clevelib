@@ -1,0 +1,18 @@
+;;; -*- Mode: common-lisp; -*-
+(:api-version "0.4")
+
+(:source "quicklisp"
+ :url "https://beta.quicklisp.org/dist/quicklisp.txt"
+ :type :quicklisp)
+
+(:asd "clevelib.asd")
+
+(:github "fiveam"
+ :path "lispci/fiveam"
+ ;; :branch "master"
+ :commit "e11dee752a8f59065033ef9d60641d4a2f1e8379")
+
+(:system "cl-reexport")
+;(:system "cl-repl")
+(:system "bordeaux-threads")
+(:system "log4cl")
