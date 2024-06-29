@@ -1,3 +1,4 @@
+![https://github.com/fkr-0/clevelib/blob/media/media/logo.png?raw=true](https://github.com/fkr-0/clevelib/blob/media/media/logo.png?raw=true)
 # Clevelib: An Event-Message System Library
 
 Clevelib is an API-driven library designed to facilitate the implementation of asynchronous event-message systems (EMS). The project is organized into three main areas:
