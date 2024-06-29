@@ -16,18 +16,7 @@
   :serial t
   :components ((:module "./src"
                  :serial t
-                 :components (;; (:file "hierarchy")
-                               ;;  (:file "base-system")
-                               ;;  (:file "core/state")
-                               ;;  (:file "event-system")
-                               ;;  (:file "event-target")
-                               ;;  (:file "event-handler")
-                               ;;  (:file "event")
-                               ;;  ;; (:file "async/synchronization")
-                               ;;  ;; (:file "listeners/handlers")
-                               ;;  ;; (:file "core/dispatcher")
-                               ;;  ;; (:file "listeners/listeners")
-                               ;;  (:file "core/event")
+                 :components ((:file "api")
                                (:file "config")
                                (:file "queue")
                                (:file "thread")
@@ -35,14 +24,13 @@
                                (:file "thread-pool")
                                (:file "event-loop")
                                (:file "channel")
-                               ;; (:file "async/async")
-                               ;;  (:file "utilities/macros")
-                               (:file "message")
                                (:file "event")
+                               (:file "message")
                                (:file "emitter")
                                (:file "target")
                                (:file "translator")
                                (:file "relay")
+                               (:file "ems")
                                (:file "clevelib"))))
   ;; Build a binary:
   ;; don't change this line.

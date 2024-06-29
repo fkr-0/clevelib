@@ -18,7 +18,9 @@
                                (:file "test-queues")
                                (:file "test-channels")
                                (:file "test-emitter")
-                               (:file "test-relay")))))
+                               (:file "test-relay")
+                               (:file "test-api")
+                               (:file "test-ems")))))
 
 ;; The following would not return the right exit code on error, but still 0.
 ;; :perform (test-op (op _) (symbol-call :fiveam :run-all-tests))
